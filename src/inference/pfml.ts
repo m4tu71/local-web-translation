@@ -1,5 +1,12 @@
 import { InferenceError, type TranslationRequest } from './types.ts';
 
+export const TRANSLATION_STOP_SEQUENCES: readonly string[] = Object.freeze([
+  '<|plamo:tag|>',
+  '<|plamo:bos|>',
+]);
+
+export const DEFAULT_TRANSLATION_MAX_TOKENS = 512;
+
 export function buildTranslationPrompt(request: TranslationRequest): string {
   const isEmpty = typeof request.text !== 'string' || !request.text.trim();
   if (isEmpty) {

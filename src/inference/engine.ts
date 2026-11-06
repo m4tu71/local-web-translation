@@ -1,4 +1,4 @@
-import { buildTranslationPrompt } from './pfml.ts';
+import { buildTranslationPrompt, DEFAULT_TRANSLATION_MAX_TOKENS } from './pfml.ts';
 import type { RuntimeFactory, RuntimePort } from './runtime-port.ts';
 import {
   InferenceError,
@@ -99,7 +99,7 @@ export class InferenceController implements InferenceEngine {
     }
 
     const prompt = buildTranslationPrompt(request);
-    const maxTokens = request.maxTokens ?? 512;
+    const maxTokens = request.maxTokens ?? DEFAULT_TRANSLATION_MAX_TOKENS;
     positiveInteger(maxTokens, 'maxTokens');
     const runtime = this.runtime;
     return this.run('translating', async signal => {

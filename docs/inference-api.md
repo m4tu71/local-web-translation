@@ -71,8 +71,44 @@ async function translateExample(modelFiles: readonly Blob[]): Promise<void> {
 - PFML3 の dataset は translation。BOS は GGUF の設定に基づき llama.cpp が追加するため、
   プロンプト文字列には重複して付けない。入力の予約文字列 <|plamo: は拒否する。
 - 停止文字列は <|plamo:tag|> と <|plamo:bos|>。トークン上限による終了は truncated: true として区別する。
+- 停止文字列と初期トークン上限は pfml.ts に集約する。生成時は ignore_eos: false、echo: false を明示し、
+  EOS を有効にしたまま、入力プロンプトを翻訳結果に含めない。
 - ここでは生成途中のテキストを通知しない。状態通知はロード・翻訳などの段階を表し、
   ダウンロードの進捗率・推論の進捗率ではない。
+
+## BOS と停止条件の確認
+
+loadModel が戻った後、wllama の getLoadedContextInfo() で以下を検査する。
+これは読み込んだモデルに対する実行時の検査で、ファイル名だけで判断しない。
+
+| 項目 | 固定版モデルでの期待値 |
+| --- | --- |
+| general.architecture / tokenizer.ggml.model | 両方 plamo3 |
+| add_bos_token | true |
+| add_eos_token | false |
+| BOS / EOS / EOT ID | 1 / 1 / 16 |
+| 生成終端の一覧 | EOS と EOT の ID を含む |
+
+不一致なら ready へ進まず、load-failed としてリソースを解放する。
+対象は [固定 revision のモデル](model-download.md)。モデル更新時はファイル定義だけでなく
+トークンの契約も公式メタデータ・テンプレートと照合する。
+
+PFML3 は raw completion に渡し、チャットテンプレートや assistant プレフィックスを重ねない。
+固定版 llama.cpp の raw completion 経路は add_special=true / parse_special=true でトークン化する。
+そのため、アプリ側は BOS 文字列を付けず、GGUF の add_bos_token=true による追加に任せる。
+入力末尾は output の <|plamo:msg|> とし、入力側へ EOS や停止用トークンを追加しない。
+モデルが生成する <|plamo:tag|> / <|plamo:bos|> を停止条件にする。
+
+### 確認の根拠と限界
+
+- [公式 PFML3 説明（固定 revision）](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/blob/dbeb0856cb0b004b484f190bb71dd65876297013/README.md#pfml3-prompt-format)
+- [公式 chat_template.jinja](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/blob/dbeb0856cb0b004b484f190bb71dd65876297013/chat_template.jinja)
+- [wllama の raw completion 呼び出し](https://github.com/ngxson/wllama/blob/c10c21114984e37fe6ba4edbba446c28c5b7a954/cpp/wllama-context.h)
+- [llama.cpp の tokenize_cli_input](https://github.com/ggml-org/llama.cpp/blob/d38bea34227bbf9069d62fdc239c98ab6e05435a/tools/server/server-context.cpp#L2638)
+
+日本語→英語・英語→日本語のプロンプト、原文の空白保持、予約トークン拒否、BOS 非重複、
+生成パラメータ、メタデータ不一致時の失敗と解放をモックで確認する。
+実 GGUF のロード時にこの検査を通ることや、生成が実際に停止することは未検証。
 
 ## 状態と同時実行
 
