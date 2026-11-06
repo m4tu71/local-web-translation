@@ -20,6 +20,8 @@ UI は src/inference/index.ts の createInferenceEngine またはページ共通
 
 入力ファイルのダウンロード、revision / ハッシュ検証、OPFS 保存と保持期限は呼び出し元の責務。
 この API はネットワークへ翻訳テキストを送らず、モデルも自動取得しない。
+固定モデルの取得と画面表示は別の [ModelDownloader](model-download.md) が担当する。
+取得後の Blob を loadModel([blob]) へ渡す UI の接続は次の工程。
 
 ```typescript
 import { createInferenceEngine, InferenceError } from './inference/index';

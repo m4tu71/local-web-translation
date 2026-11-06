@@ -22,6 +22,7 @@
     "vite": "8.3.6"
   },
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "@wllama/wllama": "file:vendor/wllama/wllama-3.12.0-c10c211.tgz",
     "@wllama/wllama-compat": "file:vendor/wllama/wllama-compat-3.12.0-c10c211.tgz"
   }

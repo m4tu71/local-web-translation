@@ -4,7 +4,9 @@
 lockfile 更新、npm ls、型検査・ビルド、WASM の HTTP 配信まで確認。ブラウザ内の初期化・推論実行は未検証。
 
 ロード・翻訳・中止・破棄・状態通知を扱う [推論 API](inference-api.md) を実装し、モックで検証済み。
-実モデルの取得と PoC 画面は次の工程。
+[固定モデルの取得と進捗表示](model-download.md) も実装済み。推論 API へ取得した Blob を渡す
+利用者が実モデルの取得・メモリからの削除を手動確認済み。
+ロード・翻訳用の PoC 画面と実モデルの推論検証は次の工程。
 
 具体的な構築コマンドは [wllama の自前ビルド手順](wllama-self-build.md) を参照。
 保存した版と検証範囲は [成果物の確認結果](wllama-build-verification.md) を参照。

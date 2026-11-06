@@ -11,7 +11,29 @@
       <h1>local-web-translation</h1>
       <p>ブラウザ内で翻訳するアプリを開発中です。</p>
       <p id="startup-status">起動処理を読み込んでいます。</p>
-      <p>モデルの読み込み・翻訳用の画面は未実装です。</p>
+      <section class="model-panel" aria-labelledby="model-heading">
+        <h2 id="model-heading">翻訳モデルの取得</h2>
+        <p id="model-name">PLaMo 3 Translate 0.8B · Q4_K_M</p>
+        <p>約573 MBを Hugging Face から取得します。取得はボタンを押すと始まります。</p>
+        <p class="storage-note">モデルは開いているページのメモリに保持します。再読み込みやページを閉じると失われます。</p>
+        <p>
+          <a id="model-source" href="https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/tree/dbeb0856cb0b004b484f190bb71dd65876297013">モデルの配信元</a>
+          · <a href="https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/blob/dbeb0856cb0b004b484f190bb71dd65876297013/LICENSE/ja">PLaMo Community License</a>
+        </p>
+        <div id="model-progress-region" aria-busy="false">
+          <label for="model-progress">モデルの取得状況</label>
+          <progress id="model-progress" max="573123200" value="0" aria-describedby="model-progress-text"></progress>
+          <p id="model-progress-text">0 / 573.1 MB（0%）</p>
+        </div>
+        <p id="model-status" role="status" aria-live="polite" aria-atomic="true">JavaScript の読み込み後に取得できます。</p>
+        <p id="model-error" class="error" role="alert" hidden></p>
+        <div class="model-actions">
+          <button id="model-download" type="button" disabled>モデルを取得</button>
+          <button id="model-cancel" type="button" disabled>中止</button>
+          <button id="model-clear" type="button" disabled>メモリから削除</button>
+        </div>
+      </section>
+      <p>モデルのロード・翻訳用の画面は未実装です。</p>
       <p><a href="%BASE_URL%THIRD_PARTY_NOTICES.txt">第三者ライセンス</a></p>
       <noscript>このアプリを使用するには JavaScript を有効にしてください。</noscript>
     </main>

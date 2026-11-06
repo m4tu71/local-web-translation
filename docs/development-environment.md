@@ -1,7 +1,7 @@
 # 開発環境の定義
 
 状態: 開発環境を構築済み。依存関係の復元・型検査・ビルド・HTTP 配信を確認済み。
-実ブラウザでの画面表示と推論機能は未検証。
+利用者がモデルの取得・メモリからの削除をブラウザで手動確認済み。推論機能は未検証。
 
 ## 採用構成
 
@@ -15,6 +15,7 @@
 | モジュール | ES Modules（package.json の type: module） |
 | 最初の開発依存 | vite 8.3.6、typescript 7.0.2、@types/node 22.20.5 |
 | 現在の実行時依存 | @wllama/wllama・@wllama/wllama-compat 3.12.0（保存済みローカル tarball） |
+| モデルのハッシュ検証 | @noble/hashes 2.4.0（ストリームで SHA-256 を計算） |
 | 公開先の方針 | dist/ の静的ファイルを GitHub Pages へ公開（未設定） |
 
 Node.js / npm は現在のローカル環境でバージョンを確認済み。Vite の公式要件は
@@ -78,7 +79,7 @@ Worker を導入するときは DOM と WebWorker の型が衝突しない構成
 | --- | --- |
 | npm run dev | vite |
 | npm run typecheck | tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json |
-| npm test | Node.js 標準テストランナーで推論 API のモックテスト |
+| npm test | Node.js 標準テストランナーで推論 API・モデル取得・表示状態のモックテスト |
 | npm run build | npm run typecheck && vite build |
 | npm run preview | vite preview |
 
@@ -95,6 +96,8 @@ index.html                       # エントリーポイント
 src/main.ts                      # 起動処理
 src/styles/                      # CSS
 src/inference/                    # UI 非依存 API、PFML3、wllama アダプター
+src/models/                       # 固定モデルの取得・検証・ページ内保持
+src/ui/                           # モデル取得の DOM 操作と表示状態
 tests/                            # 推論 API / wllama クライアントのモックテスト
 public/THIRD_PARTY_NOTICES.txt    # 配信に含めるライセンス表示
 vendor/wllama/                   # 自前ビルド済み tarball 2 個と manifest
@@ -108,7 +111,7 @@ dist/                            # ビルド成果物、Git 管理外
 .ai/                             # 調査・検証記録、Git 管理外
 ```
 
-src/ui/、src/storage/ は未作成で、必要になった時点で追加する。
+src/storage/ は未作成で、OPFS のキャッシュ実装時に追加する。
 WASM はインストール済み依存から Vite で解決し、Worker コードは同じ依存から取り込む。
 モデル重みは public/、src/、dist/、Git 管理対象のいずれにも置かず、
 Hugging Face からブラウザが直接取得して OPFS に保存する。
@@ -151,7 +154,9 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
   WASM / Worker の読み込み設定と dev / preview のサブパスでの HTTP 配信を確認。
   配信された両 WASM の SHA-256 も manifest と一致。ブラウザ内の初期化は未検証。
   推論 API のロード・翻訳・中止・破棄・状態通知は実装し、モックで検証済み。
-  モデル取得・PoC 画面、OPFS、デプロイは未実装。実モデルのロード・翻訳は未検証。
+  固定モデルの取得・検証・進捗・エラー表示は実装し、小さな模擬データで検証済み。
+  利用者が実モデルの取得・メモリからの削除を手動確認済み（詳細はモデル取得文書に記録）。
+  ロード・翻訳用の PoC 画面、OPFS、デプロイは未実装。実モデルのロード・翻訳は未検証。
 
 ## 参照
 

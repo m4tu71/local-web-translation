@@ -1,4 +1,5 @@
 import './styles/main.css';
+import { mountModelDownload } from './ui/model-download.ts';
 
 const startupStatus = document.querySelector<HTMLParagraphElement>('#startup-status');
 
@@ -7,6 +8,9 @@ if (!startupStatus) {
 }
 
 startupStatus.textContent = '開発環境の起動を確認しました。';
+
+// No request starts until the user presses the download button.
+export const modelDownloader = mountModelDownload();
 
 // Subscribe through the application API; wllama stays lazy until model loading.
 void import('./inference/index')
