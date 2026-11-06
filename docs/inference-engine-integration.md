@@ -1,8 +1,10 @@
 # 推論エンジンの導入・切り替え方針
 
-状態: 構成の定義。wllama のビルド・インストール・推論実行は未実施。
+状態: 自前ビルド成果物を保存・静的確認済み。以下のアプリ組み込み方針は未実装。
+依存への導入・WASM の配信・推論実行は未実施。
 
 具体的な構築コマンドは [wllama の自前ビルド手順](wllama-self-build.md) を参照。
+保存した版と検証範囲は [成果物の確認結果](wllama-build-verification.md) を参照。
 
 ## 目的
 
@@ -20,16 +22,24 @@ PLaMo 3 対応を含む自前ビルドで PoC を進め、公式 npm 版の対�
 | 自前ビルド | file:vendor/wllama/wllama-3.12.0-c10c211.tgz |
 | 公式版へ移行後 | 対応を検証した公式 npm 版の完全固定バージョン |
 
-上記ファイル名は構築予定の成果物名であり、現在このファイルは存在しない。
+上記 tarball と対応する compat 版は vendor/wllama/ に保存済み。依存指定への追加は次の工程。
 3.12.0 は調査した開発ソースの表記で、公式 npm 公開版・動作確認済み版を意味しない。
-現時点の候補は wllama commit c10c21114984e37fe6ba4edbba446c28c5b7a954 と、
+保存済み成果物の対象は wllama commit c10c21114984e37fe6ba4edbba446c28c5b7a954 と、
 その submodule の llama.cpp d38bea34227bbf9069d62fdc239c98ab6e05435a。
 
-vendor/ の tarball は再構築に必要な入力として Git 管理する。
-構築時に .gitignore の *.tgz に対して当該ファイルだけの例外を追加する。
-package-lock.json も更新し、通常の開発・CI は npm ci だけで依存を復元する。
+vendor/ の通常版・compat 版 tarball と manifest は Git 管理済み。
+.gitignore の *.tgz に対して当該 2 ファイルだけの例外を追加済み。
+導入時に package-lock.json を更新し、以後の開発・CI は npm ci だけで依存を復元する。
 Docker / Emscripten は自前パッケージの作成時に必要とし、アプリの通常ビルドには要求しない。
-モデル重みは tarball に含めない。ライセンス・著作権表示を同梱する。
+モデル重みが含まれず、ライセンスが同梱されていることは静的確認済み。
+
+2026-11-06 の調査では、npm 公開版 3.8.1 に紐づく llama.cpp は対象 GGUF の
+tokenizer.ggml.model = plamo3 を認識しないため、自前ビルドを PoC 候補とした。
+保存した版は識別子と既知の前処理修正を含む。実モデルがロード・翻訳できるかは未検証であり、
+エンジンの最終採用は PoC 結果に基づいて判断する。
+根拠: [旧版の判定処理](https://github.com/ggml-org/llama.cpp/blob/46ca246de9bb1c35269722a6240d37d9dfd79cad/src/llama-vocab.cpp#L2130-L2182)、
+[保存版の判定処理](https://github.com/ggml-org/llama.cpp/blob/d38bea34227bbf9069d62fdc239c98ab6e05435a/src/llama-vocab.cpp#L2403)、
+[前処理修正](https://github.com/ggml-org/llama.cpp/pull/30045)。
 
 ## アプリとの境界
 

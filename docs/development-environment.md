@@ -14,8 +14,8 @@
 | パッケージ管理 | npm。基準は 10.9.10 |
 | モジュール | ES Modules（package.json の type: module） |
 | 最初の開発依存 | vite 8.3.6、typescript 7.0.2、@types/node 22.20.5 |
-| 最初の実行時依存 | なし。推論エンジンは互換性調査後に追加 |
-| 配信 | dist/ の静的ファイルを GitHub Pages へ公開 |
+| 現在の実行時依存 | なし。保存済み wllama の導入は次の工程 |
+| 公開先の方針 | dist/ の静的ファイルを GitHub Pages へ公開（未設定） |
 
 Node.js / npm は現在のローカル環境でバージョンを確認済み。Vite の公式要件は
 Node.js 20.19+ または 22.12+。Node.js 22 系を使用する間も保守期限と更新を確認する。
@@ -91,10 +91,7 @@ docs/development-environment.md  # この定義
 index.html                       # エントリーポイント
 src/main.ts                      # 起動処理
 src/styles/                      # CSS
-src/ui/                          # DOM 操作
-src/inference/                   # 推論エンジンを隔離する境界
-src/storage/                     # OPFS と期限管理
-public/                          # ビルド時にコピーする静的アセット
+vendor/wllama/                   # 自前ビルド済み tarball 2 個と manifest
 vite.config.ts
 tsconfig.json
 tsconfig.node.json
@@ -105,7 +102,8 @@ dist/                            # ビルド成果物、Git 管理外
 .ai/                             # 調査・検証記録、Git 管理外
 ```
 
-各ディレクトリは必要になった時点で作成する。public/wasm/ はエンジン選定後に検討する。
+src/ui/、src/inference/、src/storage/、public/ は未作成で、必要になった時点で追加する。
+WASM はインストール済み依存から Vite で解決する方針とし、コピーが必要な場合も自動化する。
 モデル重みは public/、src/、dist/、Git 管理対象のいずれにも置かず、
 Hugging Face からブラウザが直接取得して OPFS に保存する。
 
@@ -114,7 +112,8 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 エンジン導入時は [推論エンジンの導入・切り替え方針](inference-engine-integration.md) に従う。
 自前ビルドと公式 npm 版を同じパッケージ名で扱い、アダプターとアセット解決を分離する。
 
-- wllama などのエンジンとバージョンは、PLaMo 3 GGUF の調査・実行結果で決める。
+- PoC 候補の wllama 3.12.0 相当はビルド・保存・静的確認済み。依存への導入と実行検証は次の工程。
+  最終採用は PLaMo 3 のロード・翻訳結果に基づいて決める。
 - WASM アセットの配置、Worker、WebGPU、WASM スレッド数はエンジン要件を確認して定義する。
 - マルチスレッド WASM が要求するクロスオリジン分離は、GitHub Pages での成立条件も検証する。
   開発サーバーだけにヘッダーを追加して公開環境でも動くとは判断しない。
@@ -136,10 +135,11 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 - npm run build 成功（アプリと Vite 設定の型検査を含む）。
 - 開発サーバーと preview のサブパスで HTML・JavaScript・CSS の HTTP 200 を確認。
 - dist/ は HTML・JavaScript・CSS の 3 ファイルのみ。モデル重みは含まれない。
-- 初回 npm install の監査結果は既知の脆弱性 0 件。
-- ブラウザ接続機能が利用できず、Chrome の UI 操作もツール側で許可されなかったため、
-  実ブラウザの表示・JavaScript 実行は未確認。
-- 推論エンジン、モデル取得、OPFS、デプロイは未実装。
+- npm 10.9.10 への更新後に依存復元・型検査・ビルドを確認。2026-11-06 の npm audit は既知の脆弱性 0 件。
+  wllama はアプリの依存へ未導入であり、この監査に自前 tarball 内部のコードは含まれない。
+- ブラウザ操作は自動化しない。実ブラウザの表示・JavaScript 実行は未確認。
+- wllama の保存済み成果物は [静的確認済み](wllama-build-verification.md)。
+  アプリへの組み込み、モデル取得、OPFS、デプロイは未実装。
 
 ## 参照
 
