@@ -140,7 +140,8 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 - ブラウザ操作は自動化しない。実ブラウザの表示・JavaScript 実行は未確認。
 - wllama の保存済み成果物は [静的確認済み](wllama-build-verification.md)。
   ローカル tarball から通常版・compat 版の依存導入後、npm ls と型検査・ビルドが成功。
-  依存追加後の npm ci による復元はまだ確認していない。
+  依存追加後も npm ci --offline で 21 パッケージの復元に成功。
+  復元した両 WASM の SHA-256 が manifest と一致し、型検査・ビルドも成功。
   WASM / Worker の組み込み、モデル取得、OPFS、デプロイは未実装。
 
 ## 参照

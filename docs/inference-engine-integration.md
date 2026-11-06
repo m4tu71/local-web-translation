@@ -30,7 +30,7 @@ PLaMo 3 対応を含む自前ビルドで PoC を進め、公式 npm 版の対�
 vendor/ の通常版・compat 版 tarball と manifest は Git 管理済み。
 .gitignore の *.tgz に対して当該 2 ファイルだけの例外を追加済み。
 導入時に package-lock.json を更新済み。以後の開発・CI は npm ci で依存を復元する。
-依存追加後の npm ci による復元確認は次の工程。
+依存追加後の npm ci --offline による復元と、両 WASM の SHA-256 の manifest との一致を確認済み。
 Docker / Emscripten は自前パッケージの作成時に必要とし、アプリの通常ビルドには要求しない。
 モデル重みが含まれず、ライセンスが同梱されていることは静的確認済み。
 
