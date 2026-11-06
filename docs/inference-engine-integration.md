@@ -1,7 +1,7 @@
 # 推論エンジンの導入・切り替え方針
 
-状態: 自前ビルド成果物を保存・静的確認済み。以下のアプリ組み込み方針は未実装。
-依存への導入・WASM の配信・推論実行は未実施。
+状態: 自前ビルド成果物を保存・静的確認し、通常版・compat 版を dependencies へ導入済み。
+lockfile 更新、npm ls、型検査・ビルド、WASM の HTTP 配信まで確認。ブラウザ内の初期化・推論実行は未検証。
 
 具体的な構築コマンドは [wllama の自前ビルド手順](wllama-self-build.md) を参照。
 保存した版と検証範囲は [成果物の確認結果](wllama-build-verification.md) を参照。
@@ -22,14 +22,15 @@ PLaMo 3 対応を含む自前ビルドで PoC を進め、公式 npm 版の対�
 | 自前ビルド | file:vendor/wllama/wllama-3.12.0-c10c211.tgz |
 | 公式版へ移行後 | 対応を検証した公式 npm 版の完全固定バージョン |
 
-上記 tarball と対応する compat 版は vendor/wllama/ に保存済み。依存指定への追加は次の工程。
+上記 tarball と対応する compat 版は vendor/wllama/ に保存し、依存指定へ追加済み。
 3.12.0 は調査した開発ソースの表記で、公式 npm 公開版・動作確認済み版を意味しない。
 保存済み成果物の対象は wllama commit c10c21114984e37fe6ba4edbba446c28c5b7a954 と、
 その submodule の llama.cpp d38bea34227bbf9069d62fdc239c98ab6e05435a。
 
 vendor/ の通常版・compat 版 tarball と manifest は Git 管理済み。
 .gitignore の *.tgz に対して当該 2 ファイルだけの例外を追加済み。
-導入時に package-lock.json を更新し、以後の開発・CI は npm ci だけで依存を復元する。
+導入時に package-lock.json を更新済み。以後の開発・CI は npm ci で依存を復元する。
+依存追加後の npm ci --offline による復元と、両 WASM の SHA-256 の manifest との一致を確認済み。
 Docker / Emscripten は自前パッケージの作成時に必要とし、アプリの通常ビルドには要求しない。
 モデル重みが含まれず、ライセンスが同梱されていることは静的確認済み。
 
@@ -60,10 +61,31 @@ UI → InferenceEngine → WllamaEngine → @wllama/wllama
 
 ## JS・Worker・WASM の整合
 
+読み込み設定は src/inference/wllama-runtime.ts に実装済み。
+src/main.ts から遅延 import し、Wllama インスタンスにアセットの取得元を設定する。
+ここでは loadModel を呼ばず、WASM の取得・Worker 起動・モデル取得・推論は開始しない。
+
+| アセット | 解決方法 |
+| --- | --- |
+| 通常版 WASM | @wllama/wllama/esm/wasm/wllama.wasm?url |
+| 通常版 Worker | @wllama/wllama の JavaScript 内蔵コードを使用 |
+| compat WASM | @wllama/wllama-compat/wasm/wllama.wasm?url |
+| compat Worker | @wllama/wllama-compat/wasm/wllama.js?raw を worker.code として渡す |
+
+setCompat にローカルの WASM URL と Worker コードを明示し、CDN のデフォルトを置き換える。
+mode は firefox_safari とし、Firefox でも JSPI / Memory64 が不足する場合に compat を選択できるようにする。
+compat の強制利用や GPU / CPU の指定ではない。各ブラウザでの実行可否・性能は未検証。
+skipVersionCheck は false のまま維持する。ブラウザ実行時の版チェック自体はまだ実施していない。
+
+Vite が両 WASM を内容ハッシュ付きの assets/ へ出力し、base を反映した URL を生成する。
+dev / preview の /local-web-translation/ 配下で、両 WASM の HTTP 200、application/wasm、
+SHA-256 の manifest との一致を確認。開発用の compat ?raw は元の JS ファイルと一致し、
+本番 JS にも Worker コードが含まれる。wllama / llama.cpp のライセンス表示も dist/ に同梱する。
+
 - ビルド時はインストール済み @wllama/wllama の公開パスから必要なアセットを解決する。
   vendor/ のソースツリーや .ai/ を直接参照しない。
 - WASM の配置処理は一か所に集約し、dev / build / preview の各経路で同じ依存元を使う。
-  配布パッケージの実際の exports とアセット構成を確認してから実装する。
+  現在は Vite の import で解決し、手動コピー処理は設けない。
 - Vite によるアセット出力・URL 生成を優先する。コピーが必要な場合は自動化し、
   ビルド出力に古い WASM が残らないようにする。手動コピーを運用手順にしない。
 - 出力名は内容ハッシュまたはビルド識別子で区別し、移行後に旧 WASM を再利用しない。
