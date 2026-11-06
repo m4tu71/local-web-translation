@@ -24,6 +24,8 @@ translation application powered by PLaMo 3 Translate.
 - Keep large model files out of the build output.
 - Run available checks after changes.
 - Keep GitHub Pages base paths compatible.
+- Isolate engine-specific imports and APIs inside the inference adapter.
+- Keep self-built wllama replaceable by the official npm package; source JS, Worker, and WASM from the same installed build.
 
 ## Design
 - Use the installed design-skills when relevant.

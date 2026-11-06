@@ -106,6 +106,9 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 
 ## 推論 PoC に向けた保留事項
 
+エンジン導入時は [推論エンジンの導入・切り替え方針](inference-engine-integration.md) に従う。
+自前ビルドと公式 npm 版を同じパッケージ名で扱い、アダプターとアセット解決を分離する。
+
 - wllama などのエンジンとバージョンは、PLaMo 3 GGUF の調査・実行結果で決める。
 - WASM アセットの配置、Worker、WebGPU、WASM スレッド数はエンジン要件を確認して定義する。
 - マルチスレッド WASM が要求するクロスオリジン分離は、GitHub Pages での成立条件も検証する。
