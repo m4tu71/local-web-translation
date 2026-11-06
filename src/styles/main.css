@@ -62,7 +62,8 @@ button {
   cursor: pointer;
 }
 
-#model-download:enabled {
+#model-download:enabled,
+#poc-translate:enabled {
   border-color: #1758a7;
   background: #1758a7;
   color: #fff;
@@ -74,12 +75,66 @@ button:disabled {
 }
 
 button:focus-visible,
-a:focus-visible {
+a:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+pre:focus-visible,
+.translation-output:focus-visible {
   outline: 3px solid #1758a7;
   outline-offset: 3px;
 }
 
 .error {
   color: #a11522;
+  overflow-wrap: anywhere;
+}
+
+textarea,
+select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-block: 0.5rem;
+  padding: 0.65rem;
+  border: 1px solid #78838f;
+  border-radius: 0.4rem;
+  background: #fff;
+  color: #202124;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+label {
+  display: block;
+  margin-top: 1.25rem;
+  font-weight: 600;
+}
+
+.translation-output {
+  min-height: 3rem;
+  padding: 1rem;
+  border: 1px solid #c6cbd1;
+  border-radius: 0.4rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+summary {
+  cursor: pointer;
+  min-height: 44px;
+  line-height: 44px;
+}
+
+pre {
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0.75rem;
+  background: #eef1f4;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

@@ -1,6 +1,11 @@
 import { ModelDownloader, type DownloadPhase } from '../models/model-download.ts';
 import { describeModelDownload } from './model-download-view.ts';
 
+export interface ModelDownloadControls {
+  downloader: ModelDownloader;
+  setModelInUse(inUse: boolean): void;
+}
+
 function element<T extends HTMLElement>(id: string): T {
   const result = document.getElementById(id);
   if (!result) {
@@ -9,7 +14,7 @@ function element<T extends HTMLElement>(id: string): T {
   return result as T;
 }
 
-export function mountModelDownload(): ModelDownloader {
+export function mountModelDownload(): ModelDownloadControls {
   const downloader = new ModelDownloader();
   const start = element<HTMLButtonElement>('model-download');
   const cancel = element<HTMLButtonElement>('model-cancel');
@@ -21,17 +26,19 @@ export function mountModelDownload(): ModelDownloader {
   const error = element('model-error');
   const number = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 1 });
   let previousPhase: DownloadPhase | undefined;
+  let modelInUse = false;
 
   element('model-name').textContent = downloader.model.name;
   element<HTMLAnchorElement>('model-source').href =
     `https://huggingface.co/${downloader.model.repository}/tree/${downloader.model.revision}`;
 
-  downloader.subscribe(state => {
+  const render = () => {
+    const state = downloader.getState();
     const view = describeModelDownload(state);
     start.disabled = !view.canStart;
     start.textContent = state.phase === 'ready' ? '取得済み' : 'モデルを取得';
     cancel.disabled = !view.canAbort;
-    clear.disabled = !view.canClear;
+    clear.disabled = !view.canClear || modelInUse;
     progress.max = state.totalBytes;
 
     if (view.indeterminate) {
@@ -53,7 +60,9 @@ export function mountModelDownload(): ModelDownloader {
 
     error.hidden = !view.error;
     error.textContent = view.error;
-  });
+  };
+
+  downloader.subscribe(render);
 
   start.addEventListener('click', () => {
     // Errors are handled by the state subscription; do not leave a rejected promise.
@@ -63,9 +72,20 @@ export function mountModelDownload(): ModelDownloader {
     void downloader.abort().catch(() => {});
   });
   clear.addEventListener('click', () => {
+    if (modelInUse) {
+      return;
+    }
     downloader.clear();
     status.textContent = 'モデルをメモリから削除しました。';
   });
 
-  return downloader;
+  return {
+    downloader,
+    setModelInUse(inUse) {
+      if (modelInUse !== inUse) {
+        modelInUse = inUse;
+        render();
+      }
+    },
+  };
 }

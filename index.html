@@ -16,6 +16,7 @@
         <p id="model-name">PLaMo 3 Translate 0.8B · Q4_K_M</p>
         <p>約573 MBを Hugging Face から取得します。取得はボタンを押すと始まります。</p>
         <p class="storage-note">モデルは開いているページのメモリに保持します。再読み込みやページを閉じると失われます。</p>
+        <p class="storage-note">処理中は削除できません。ロードを開始した後に削除する場合は、先に下の画面でロードを解除してください。</p>
         <p>
           <a id="model-source" href="https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/tree/dbeb0856cb0b004b484f190bb71dd65876297013">モデルの配信元</a>
           · <a href="https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/blob/dbeb0856cb0b004b484f190bb71dd65876297013/LICENSE/ja">PLaMo Community License</a>
@@ -33,7 +34,37 @@
           <button id="model-clear" type="button" disabled>メモリから削除</button>
         </div>
       </section>
-      <p>モデルのロード・翻訳用の画面は未実装です。</p>
+      <section class="model-panel" aria-labelledby="poc-heading">
+        <h2 id="poc-heading">日本語 → 英語の翻訳検証</h2>
+        <p>モデルをロードし、日本語1文を英語へ翻訳します。翻訳テキストはブラウザ内で処理します。</p>
+        <label for="poc-backend">ロード時の実行設定</label>
+        <select id="poc-backend" aria-describedby="poc-backend-note" disabled>
+          <option value="auto">自動選択（WebGPU 優先）</option>
+          <option value="cpu">CPU（WASM）</option>
+        </select>
+        <p id="poc-backend-note" class="storage-note">自動選択で実際に GPU が使われるかは、別途確認が必要です。設定を変える場合はロードを解除してください。</p>
+        <div class="model-actions">
+          <button id="poc-load" type="button" disabled>モデルをロード</button>
+          <button id="poc-unload" type="button" disabled>ロードを解除</button>
+        </div>
+        <label for="poc-input">日本語（1文）</label>
+        <textarea id="poc-input" rows="3" maxlength="500" aria-describedby="poc-input-note">会議は来週の月曜日に変更されました。</textarea>
+        <p id="poc-input-note" class="storage-note">500文字まで。入力を変更すると前の翻訳結果を消去します。</p>
+        <div class="model-actions">
+          <button id="poc-translate" type="button" disabled>英語へ翻訳</button>
+          <button id="poc-abort" type="button" disabled>処理を中止</button>
+        </div>
+        <p id="poc-status" role="status" aria-live="polite" aria-atomic="true">モデルを取得するとロードできます。</p>
+        <p id="poc-error" class="error" role="alert" hidden></p>
+        <h3 id="poc-output-heading">英語の出力</h3>
+        <div id="poc-output" class="translation-output" role="region" aria-labelledby="poc-output-heading" tabindex="0">翻訳結果はまだありません。</div>
+        <p id="poc-truncated" class="error" role="alert" hidden>出力トークン上限に達しました。翻訳が途中で切れている可能性があります。</p>
+        <p id="poc-timing"></p>
+        <details>
+          <summary>検証ログ（直近100件・時刻は UTC）</summary>
+          <pre id="poc-logs" tabindex="0">操作するとログを表示します。</pre>
+        </details>
+      </section>
       <p><a href="%BASE_URL%THIRD_PARTY_NOTICES.txt">第三者ライセンス</a></p>
       <noscript>このアプリを使用するには JavaScript を有効にしてください。</noscript>
     </main>

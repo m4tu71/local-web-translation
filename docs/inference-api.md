@@ -1,7 +1,7 @@
 # UI から独立した推論 API
 
 状態: API と wllama アダプターを実装。モックによるライフサイクル検証済み。
-実モデルのロード・翻訳・GPU / CPU 動作は未検証。
+利用者の手動検証で GPU / CPU（WASM）の両経路のロード・1文翻訳・ロード解除が成功。
 
 ## 使用する API
 
@@ -21,7 +21,8 @@ UI は src/inference/index.ts の createInferenceEngine またはページ共通
 入力ファイルのダウンロード、revision / ハッシュ検証、OPFS 保存と保持期限は呼び出し元の責務。
 この API はネットワークへ翻訳テキストを送らず、モデルも自動取得しない。
 固定モデルの取得と画面表示は別の [ModelDownloader](model-download.md) が担当する。
-取得後の Blob を loadModel([blob]) へ渡す UI の接続は次の工程。
+取得後の Blob を loadModel([blob]) へ渡す [手動検証画面](translation-poc.md) を実装済み。
+UI は TranslationSession 経由で API を呼び、利用者の環境でロード・1文翻訳を確認済み。
 
 ```typescript
 import { createInferenceEngine, InferenceError } from './inference/index';
@@ -108,7 +109,8 @@ PFML3 は raw completion に渡し、チャットテンプレートや assistant
 
 日本語→英語・英語→日本語のプロンプト、原文の空白保持、予約トークン拒否、BOS 非重複、
 生成パラメータ、メタデータ不一致時の失敗と解放をモックで確認する。
-実 GGUF のロード時にこの検査を通ることや、生成が実際に停止することは未検証。
+利用者の環境で両経路のロードから翻訳まで成功し、ログで truncated=false を確認。
+ロード時の検査の個別ログや生成の停止理由は未記録であり、各停止条件の独立した検証は未実施。
 
 ## 状態と同時実行
 
