@@ -77,6 +77,8 @@ web_modules/
 
 # Output of 'npm pack'
 *.tgz
+!vendor/wllama/wllama-3.12.0-c10c211.tgz
+!vendor/wllama/wllama-compat-3.12.0-c10c211.tgz
 
 # Yarn Integrity file
 .yarn-integrity
