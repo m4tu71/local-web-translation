@@ -10,6 +10,7 @@
   },
   "packageManager": "npm@10.9.10",
   "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "dev": "vite",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "build": "npm run typecheck && vite build",
@@ -21,6 +22,7 @@
     "vite": "8.3.6"
   },
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "@wllama/wllama": "file:vendor/wllama/wllama-3.12.0-c10c211.tgz",
     "@wllama/wllama-compat": "file:vendor/wllama/wllama-compat-3.12.0-c10c211.tgz"
   }

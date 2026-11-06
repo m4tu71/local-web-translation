@@ -1,7 +1,8 @@
 # 開発環境の定義
 
 状態: 開発環境を構築済み。依存関係の復元・型検査・ビルド・HTTP 配信を確認済み。
-実ブラウザでの画面表示と推論機能は未検証。
+利用者がモデルの取得・メモリからの削除・実モデルのロードと1文翻訳をブラウザで手動確認済み。
+利用者が GPU / CPU（WASM）の両経路を確認し、処理時間とログを提供。ブラウザ・端末の詳細は未記録。
 
 ## 採用構成
 
@@ -15,6 +16,7 @@
 | モジュール | ES Modules（package.json の type: module） |
 | 最初の開発依存 | vite 8.3.6、typescript 7.0.2、@types/node 22.20.5 |
 | 現在の実行時依存 | @wllama/wllama・@wllama/wllama-compat 3.12.0（保存済みローカル tarball） |
+| モデルのハッシュ検証 | @noble/hashes 2.4.0（ストリームで SHA-256 を計算） |
 | 公開先の方針 | dist/ の静的ファイルを GitHub Pages へ公開（未設定） |
 
 Node.js / npm は現在のローカル環境でバージョンを確認済み。Vite の公式要件は
@@ -78,11 +80,14 @@ Worker を導入するときは DOM と WebWorker の型が衝突しない構成
 | --- | --- |
 | npm run dev | vite |
 | npm run typecheck | tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json |
+| npm test | Node.js 標準テストランナーで推論 API・モデル取得・表示状態のモックテスト |
 | npm run build | npm run typecheck && vite build |
 | npm run preview | vite preview |
 
 Vite 単体では型検査しないため、本番ビルドの前に型検査を必須とする。
-ESLint、整形ツール、テストランナーは初期構築の必須依存に含めず、必要な段階で定義する。
+テストは Node.js の型除去機能を使用する。src/ 内の .ts 拡張子付き import を許可するが、
+noEmit は維持し、ブラウザ向けの変換・出力は Vite が行う。
+ESLint・整形ツール・外部テストランナーは未導入。
 
 ## ファイル構成
 
@@ -91,7 +96,11 @@ docs/development-environment.md  # この定義
 index.html                       # エントリーポイント
 src/main.ts                      # 起動処理
 src/styles/                      # CSS
-src/inference/wllama-runtime.ts   # wllama のアセット設定
+src/inference/                    # UI 非依存 API、PFML3、wllama アダプター
+src/models/                       # 固定モデルの取得・検証・ページ内保持
+src/ui/                           # モデル取得の DOM 操作と表示状態
+src/poc/                          # 手動翻訳検証の操作フローとログ
+tests/                            # 推論 API / wllama クライアントのモックテスト
 public/THIRD_PARTY_NOTICES.txt    # 配信に含めるライセンス表示
 vendor/wllama/                   # 自前ビルド済み tarball 2 個と manifest
 vite.config.ts
@@ -104,7 +113,7 @@ dist/                            # ビルド成果物、Git 管理外
 .ai/                             # 調査・検証記録、Git 管理外
 ```
 
-src/ui/、src/storage/ は未作成で、必要になった時点で追加する。
+src/storage/ は未作成で、OPFS のキャッシュ実装時に追加する。
 WASM はインストール済み依存から Vite で解決し、Worker コードは同じ依存から取り込む。
 モデル重みは public/、src/、dist/、Git 管理対象のいずれにも置かず、
 Hugging Face からブラウザが直接取得して OPFS に保存する。
@@ -114,7 +123,8 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 エンジン導入時は [推論エンジンの導入・切り替え方針](inference-engine-integration.md) に従う。
 自前ビルドと公式 npm 版を同じパッケージ名で扱い、アダプターとアセット解決を分離する。
 
-- PoC 候補の wllama 3.12.0 相当はビルド・保存・静的確認・依存導入・アセット設定済み。実行検証は次の工程。
+- wllama 3.12.0 相当はビルド・保存・静的確認・依存導入・アセット設定済み。
+  利用者の環境で GPU / CPU（WASM）のロード・1文翻訳・ロード解除を確認済み。
   最終採用は PLaMo 3 のロード・翻訳結果に基づいて決める。
 - WASM / Worker は依存から取り込み済み。WebGPU と WASM スレッド数はモデル操作の実装時に定義する。
 - マルチスレッド WASM が要求するクロスオリジン分離は、GitHub Pages での成立条件も検証する。
@@ -139,14 +149,18 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 - dist/ は HTML・JavaScript・CSS、両版の WASM、第三者ライセンスを含む。モデル重みは含まれない。
 - npm 10.9.10 への更新後に依存復元・型検査・ビルドを確認。2026-11-06 の npm audit は既知の脆弱性 0 件。
   この監査は wllama の依存導入前の結果で、自前 tarball 内部のコードは含まれない。
-- ブラウザ操作は自動化しない。実ブラウザの表示・JavaScript 実行は未確認。
+- ブラウザ操作は自動化しない。実行結果は利用者の手動検証に基づく。
 - wllama の保存済み成果物は [静的確認済み](wllama-build-verification.md)。
   ローカル tarball から通常版・compat 版の依存導入後、npm ls と型検査・ビルドが成功。
   依存追加後も npm ci --offline で 21 パッケージの復元に成功。
   復元した両 WASM の SHA-256 が manifest と一致し、型検査・ビルドも成功。
   WASM / Worker の読み込み設定と dev / preview のサブパスでの HTTP 配信を確認。
-  配信された両 WASM の SHA-256 も manifest と一致。ブラウザ内の初期化は未検証。
-  モデル取得・ロード・翻訳、OPFS、デプロイは未実装。
+  配信された両 WASM の SHA-256 も manifest と一致。利用者の環境で実モデルのロード・1文翻訳が成功。
+  推論 API のロード・翻訳・中止・破棄・状態通知は実装し、モックで検証済み。
+  固定モデルの取得・検証・進捗・エラー表示は実装し、小さな模擬データで検証済み。
+  利用者が実モデルの取得・メモリからの削除を手動確認済み（詳細はモデル取得文書に記録）。
+  ロード・日英翻訳・中止・ロード解除の PoC 画面は実装し、模擬エンジンで検証済み。
+  OPFS、デプロイは未実装。利用者の GPU / CPU 別の確認結果は翻訳 PoC 文書に記録。
 
 ## 参照
 

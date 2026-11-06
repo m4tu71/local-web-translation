@@ -1,7 +1,13 @@
 # 推論エンジンの導入・切り替え方針
 
 状態: 自前ビルド成果物を保存・静的確認し、通常版・compat 版を dependencies へ導入済み。
-lockfile 更新、npm ls、型検査・ビルド、WASM の HTTP 配信まで確認。ブラウザ内の初期化・推論実行は未検証。
+lockfile 更新、npm ls、型検査・ビルド、WASM の HTTP 配信を確認。
+利用者の環境で GPU / CPU（WASM）のロード・日本語1文→英語の翻訳・ロード解除が成功。
+
+ロード・翻訳・中止・破棄・状態通知を扱う [推論 API](inference-api.md) を実装し、モックで検証済み。
+[固定モデルの取得と進捗表示](model-download.md) も実装済み。推論 API へ取得した Blob を渡す
+利用者が実モデルの取得・メモリからの削除を手動確認済み。
+[ロード・翻訳用の PoC 画面](translation-poc.md) は実装済み。GPU / CPU 別の手動確認結果とログを記録済み。
 
 具体的な構築コマンドは [wllama の自前ビルド手順](wllama-self-build.md) を参照。
 保存した版と検証範囲は [成果物の確認結果](wllama-build-verification.md) を参照。
@@ -36,8 +42,8 @@ Docker / Emscripten は自前パッケージの作成時に必要とし、アプ
 
 2026-11-06 の調査では、npm 公開版 3.8.1 に紐づく llama.cpp は対象 GGUF の
 tokenizer.ggml.model = plamo3 を認識しないため、自前ビルドを PoC 候補とした。
-保存した版は識別子と既知の前処理修正を含む。実モデルがロード・翻訳できるかは未検証であり、
-エンジンの最終採用は PoC 結果に基づいて判断する。
+保存した版は識別子と既知の前処理修正を含む。利用者の環境でロード・1文翻訳に成功した。
+広い互換性やエンジンの最終採用は、GPU / CPU 別・ブラウザ別の追加検証に基づいて判断する。
 根拠: [旧版の判定処理](https://github.com/ggml-org/llama.cpp/blob/46ca246de9bb1c35269722a6240d37d9dfd79cad/src/llama-vocab.cpp#L2130-L2182)、
 [保存版の判定処理](https://github.com/ggml-org/llama.cpp/blob/d38bea34227bbf9069d62fdc239c98ab6e05435a/src/llama-vocab.cpp#L2403)、
 [前処理修正](https://github.com/ggml-org/llama.cpp/pull/30045)。
@@ -45,12 +51,12 @@ tokenizer.ggml.model = plamo3 を認識しないため、自前ビルドを PoC 
 ## アプリとの境界
 
 ```text
-UI → InferenceEngine → WllamaEngine → @wllama/wllama
-           ↑                ↑
-   OPFS からのモデル    PFML3 プロンプト
+UI → InferenceEngine / InferenceController → wllama アダプター → @wllama/wllama
+                       ↑
+              取得済み Blob / File、PFML3
 ```
 
-- src/inference/ 内にアプリ独自の InferenceEngine 型と WllamaEngine アダプターを置く。
+- src/inference/ 内に InferenceEngine 型、InferenceController、wllama アダプターを実装済み。
 - UI はロード・翻訳・中止・破棄・状態通知をアプリ独自の型で扱う。
   wllama の型・オプション・レスポンスを UI やストレージ層へ公開しない。
 - エンジン固有の import、API 呼び出し、エラー変換、バックエンド設定はアダプターへ集約する。
@@ -62,8 +68,9 @@ UI → InferenceEngine → WllamaEngine → @wllama/wllama
 ## JS・Worker・WASM の整合
 
 読み込み設定は src/inference/wllama-runtime.ts に実装済み。
-src/main.ts から遅延 import し、Wllama インスタンスにアセットの取得元を設定する。
-ここでは loadModel を呼ばず、WASM の取得・Worker 起動・モデル取得・推論は開始しない。
+src/main.ts はアプリ独自 API の状態通知を購読する。実際の loadModel 呼び出し時に
+wllama モジュールを遅延 import し、インスタンスへアセットの取得元を設定する。
+ページ起動や状態通知の購読だけでは WASM の取得・Worker 起動・モデル取得・推論は開始しない。
 
 | アセット | 解決方法 |
 | --- | --- |

@@ -8,7 +8,11 @@ llama.cpp / ggml (included in the wllama WASM builds)
 https://github.com/ggml-org/llama.cpp
 Copyright (c) 2023-2026 The ggml authors
 
-Both projects are distributed under the following MIT License.
+@noble/hashes
+https://github.com/paulmillr/noble-hashes
+Copyright (c) 2022 Paul Miller (https://paulmillr.com)
+
+These projects are distributed under the following MIT License.
 
 MIT License
 

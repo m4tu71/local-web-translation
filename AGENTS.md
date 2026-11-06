@@ -19,6 +19,7 @@ translation application powered by PLaMo 3 Translate.
 ## Development
 - Use TypeScript and Vite.
 - Do not use React, Vue, or other UI frameworks.
+- Favor readable control flow, descriptive names, and small functions with clear responsibilities.
 - Verify browser engine and model compatibility.
 - Never claim inference works without testing it.
 - Keep large model files out of the build output.
