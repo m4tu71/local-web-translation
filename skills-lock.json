@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "design-critique": {
+      "source": "cuellarfr/design-skills",
+      "sourceType": "github",
+      "skillPath": "skills/design-critique/SKILL.md",
+      "computedHash": "f6b5dfa054efc317c81c9906cb862507d92f678780e6ac4f2dc2646a348a2eb5"
+    }
+  }
+}

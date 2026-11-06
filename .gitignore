@@ -48,6 +48,15 @@ web_modules/
 # TypeScript cache
 *.tsbuildinfo
 
+# Vite caches and local overrides
+.vite/
+.vite-temp/
+*.local
+
+# Model weights and partial downloads (keep outside Git)
+*.gguf
+*.gguf.part
+
 # Optional npm cache directory
 .npm
 
@@ -68,6 +77,8 @@ web_modules/
 
 # Output of 'npm pack'
 *.tgz
+!vendor/wllama/wllama-3.12.0-c10c211.tgz
+!vendor/wllama/wllama-compat-3.12.0-c10c211.tgz
 
 # Yarn Integrity file
 .yarn-integrity
@@ -134,3 +145,13 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+
+
+
+
+
+
+
+# Local agent research and work logs
+.ai/

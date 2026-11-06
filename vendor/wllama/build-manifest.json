@@ -1,0 +1,30 @@
+{
+  "builtAt": "2026-11-06T08:01:35.506Z",
+  "wllama": {
+    "version": "3.12.0",
+    "commit": "c10c21114984e37fe6ba4edbba446c28c5b7a954"
+  },
+  "llamaCppCommit": "d38bea34227bbf9069d62fdc239c98ab6e05435a",
+  "node": "v22.23.4",
+  "npm": "10.9.10",
+  "docker": "29.8.1",
+  "compose": "5.5.1",
+  "emscriptenImage": "emscripten/emsdk:4.0.20",
+  "dawnTag": "v20260317.182325",
+  "upstreamLockSha256": "8399677f207b40cef885fdc6beb169a82dd61e2350699d2b5eab339a0c08f228",
+  "wasm": {
+    "defaultSha256": "c6018ac6593afc38e6294ebd3b1c53644c7d0c8e493d598d773fe63233ab788b",
+    "compatSha256": "3d26958094d5b73722369f5e2c99baec8d793acea23b049a0f695c9318a41659"
+  },
+  "artifacts": [
+    {
+      "file": "wllama-3.12.0-c10c211.tgz",
+      "sha256": "fb13850de9e379ef9563087093f90033edde65b1c7a73203853957960da709a9"
+    },
+    {
+      "file": "wllama-compat-3.12.0-c10c211.tgz",
+      "sha256": "6dc2b1e214624c87115dac18a923044fdceda2930ae283347ce433168ffea5b8"
+    }
+  ],
+  "inferenceTested": false
+}

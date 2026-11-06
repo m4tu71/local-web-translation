@@ -1,0 +1,94 @@
+# 推論エンジンの導入・切り替え方針
+
+状態: 自前ビルド成果物を保存・静的確認済み。以下のアプリ組み込み方針は未実装。
+依存への導入・WASM の配信・推論実行は未実施。
+
+具体的な構築コマンドは [wllama の自前ビルド手順](wllama-self-build.md) を参照。
+保存した版と検証範囲は [成果物の確認結果](wllama-build-verification.md) を参照。
+
+## 目的
+
+PLaMo 3 対応を含む自前ビルドで PoC を進め、公式 npm 版の対応を確認できた時点で
+依存の取得先を変更できるようにする。アプリ側の翻訳 UI・プロンプト・OPFS 管理を
+パッケージの配布方法から独立させる。
+
+## 依存関係
+
+アプリが参照するパッケージ名は常に @wllama/wllama とする。
+自前ビルドも同名の npm パッケージとしてまとめ、dependencies に指定する。
+
+| 段階 | package.json の @wllama/wllama の取得先 |
+| --- | --- |
+| 自前ビルド | file:vendor/wllama/wllama-3.12.0-c10c211.tgz |
+| 公式版へ移行後 | 対応を検証した公式 npm 版の完全固定バージョン |
+
+上記 tarball と対応する compat 版は vendor/wllama/ に保存済み。依存指定への追加は次の工程。
+3.12.0 は調査した開発ソースの表記で、公式 npm 公開版・動作確認済み版を意味しない。
+保存済み成果物の対象は wllama commit c10c21114984e37fe6ba4edbba446c28c5b7a954 と、
+その submodule の llama.cpp d38bea34227bbf9069d62fdc239c98ab6e05435a。
+
+vendor/ の通常版・compat 版 tarball と manifest は Git 管理済み。
+.gitignore の *.tgz に対して当該 2 ファイルだけの例外を追加済み。
+導入時に package-lock.json を更新し、以後の開発・CI は npm ci だけで依存を復元する。
+Docker / Emscripten は自前パッケージの作成時に必要とし、アプリの通常ビルドには要求しない。
+モデル重みが含まれず、ライセンスが同梱されていることは静的確認済み。
+
+2026-11-06 の調査では、npm 公開版 3.8.1 に紐づく llama.cpp は対象 GGUF の
+tokenizer.ggml.model = plamo3 を認識しないため、自前ビルドを PoC 候補とした。
+保存した版は識別子と既知の前処理修正を含む。実モデルがロード・翻訳できるかは未検証であり、
+エンジンの最終採用は PoC 結果に基づいて判断する。
+根拠: [旧版の判定処理](https://github.com/ggml-org/llama.cpp/blob/46ca246de9bb1c35269722a6240d37d9dfd79cad/src/llama-vocab.cpp#L2130-L2182)、
+[保存版の判定処理](https://github.com/ggml-org/llama.cpp/blob/d38bea34227bbf9069d62fdc239c98ab6e05435a/src/llama-vocab.cpp#L2403)、
+[前処理修正](https://github.com/ggml-org/llama.cpp/pull/30045)。
+
+## アプリとの境界
+
+```text
+UI → InferenceEngine → WllamaEngine → @wllama/wllama
+           ↑                ↑
+   OPFS からのモデル    PFML3 プロンプト
+```
+
+- src/inference/ 内にアプリ独自の InferenceEngine 型と WllamaEngine アダプターを置く。
+- UI はロード・翻訳・中止・破棄・状態通知をアプリ独自の型で扱う。
+  wllama の型・オプション・レスポンスを UI やストレージ層へ公開しない。
+- エンジン固有の import、API 呼び出し、エラー変換、バックエンド設定はアダプターへ集約する。
+- PFML3 の組み立てと入力検証はパッケージの取得先に依存しない処理として分離する。
+- OPFS の期限管理とモデルの revision / 整合性管理もアプリ側に置く。
+  エンジン交換や npm 版への切り替えだけでモデルを再ダウンロードしない。
+  モデル自体の変更やキャッシュ破損を検出した場合は別途再取得する。
+
+## JS・Worker・WASM の整合
+
+- ビルド時はインストール済み @wllama/wllama の公開パスから必要なアセットを解決する。
+  vendor/ のソースツリーや .ai/ を直接参照しない。
+- WASM の配置処理は一か所に集約し、dev / build / preview の各経路で同じ依存元を使う。
+  配布パッケージの実際の exports とアセット構成を確認してから実装する。
+- Vite によるアセット出力・URL 生成を優先する。コピーが必要な場合は自動化し、
+  ビルド出力に古い WASM が残らないようにする。手動コピーを運用手順にしない。
+- 出力名は内容ハッシュまたはビルド識別子で区別し、移行後に旧 WASM を再利用しない。
+  GitHub Pages の base を反映した URL をアダプターへ渡す。
+- wllama の JS / Worker / WASM を同じビルドから揃え、版整合チェックは無効化しない。
+- compat を導入する場合も通常版との組み合わせを固定し、一緒に切り替える。
+  CDN から別版の WASM を補う構成は使用しない。
+
+## 出自と確認結果
+
+自前パッケージには固定コミット、submodule、ツールチェーン、ビルド手順、
+成果物の SHA-256 を記録した manifest を添える。
+アプリのビルド記録にも実際の依存バージョンと WASM ハッシュを残し、
+「同じ 3.12.0 表記だが中身が異なる」ケースを識別できるようにする。
+
+## 公式 npm 版への移行手順
+
+1. 公開版のソース・組み込み llama.cpp・配布物が PLaMo 3 に対応しているか確認する。
+2. dependencies の取得先を公式版の固定バージョンへ変更し、lockfile を更新する。
+3. アセット解決・パッケージ API に差があればアダプターとビルド処理だけを調整する。
+   取得先の変更だけで必ず移行できるとは保証しない。
+4. 型検査・本番ビルド・サブパスでのアセット配信・JS/WASM の版整合を確認する。
+5. 手動 PoC で同じモデル revision・PFML3 入力による翻訳、停止条件、GPU / CPU を検証する。
+   ブラウザ操作の自動化は行わない。実行結果が得られるまでは未検証として扱う。
+6. 問題がなければ旧 tarball と専用ビルド手順を整理する。移行前の Git コミットから
+   package.json・lockfile・tarball を一緒に戻せる状態で切り替える。
+
+公式版への移行は開発時に行う。アプリ起動時に latest を自動取得してエンジンを更新しない。
