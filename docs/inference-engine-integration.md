@@ -1,7 +1,7 @@
 # 推論エンジンの導入・切り替え方針
 
 状態: 自前ビルド成果物を保存・静的確認し、通常版・compat 版を dependencies へ導入済み。
-lockfile 更新、npm ls、型検査・ビルドまで確認。WASM の配信・推論実行は未実施。
+lockfile 更新、npm ls、型検査・ビルド、WASM の HTTP 配信まで確認。ブラウザ内の初期化・推論実行は未検証。
 
 具体的な構築コマンドは [wllama の自前ビルド手順](wllama-self-build.md) を参照。
 保存した版と検証範囲は [成果物の確認結果](wllama-build-verification.md) を参照。
@@ -61,10 +61,31 @@ UI → InferenceEngine → WllamaEngine → @wllama/wllama
 
 ## JS・Worker・WASM の整合
 
+読み込み設定は src/inference/wllama-runtime.ts に実装済み。
+src/main.ts から遅延 import し、Wllama インスタンスにアセットの取得元を設定する。
+ここでは loadModel を呼ばず、WASM の取得・Worker 起動・モデル取得・推論は開始しない。
+
+| アセット | 解決方法 |
+| --- | --- |
+| 通常版 WASM | @wllama/wllama/esm/wasm/wllama.wasm?url |
+| 通常版 Worker | @wllama/wllama の JavaScript 内蔵コードを使用 |
+| compat WASM | @wllama/wllama-compat/wasm/wllama.wasm?url |
+| compat Worker | @wllama/wllama-compat/wasm/wllama.js?raw を worker.code として渡す |
+
+setCompat にローカルの WASM URL と Worker コードを明示し、CDN のデフォルトを置き換える。
+mode は firefox_safari とし、Firefox でも JSPI / Memory64 が不足する場合に compat を選択できるようにする。
+compat の強制利用や GPU / CPU の指定ではない。各ブラウザでの実行可否・性能は未検証。
+skipVersionCheck は false のまま維持する。ブラウザ実行時の版チェック自体はまだ実施していない。
+
+Vite が両 WASM を内容ハッシュ付きの assets/ へ出力し、base を反映した URL を生成する。
+dev / preview の /local-web-translation/ 配下で、両 WASM の HTTP 200、application/wasm、
+SHA-256 の manifest との一致を確認。開発用の compat ?raw は元の JS ファイルと一致し、
+本番 JS にも Worker コードが含まれる。wllama / llama.cpp のライセンス表示も dist/ に同梱する。
+
 - ビルド時はインストール済み @wllama/wllama の公開パスから必要なアセットを解決する。
   vendor/ のソースツリーや .ai/ を直接参照しない。
 - WASM の配置処理は一か所に集約し、dev / build / preview の各経路で同じ依存元を使う。
-  配布パッケージの実際の exports とアセット構成を確認してから実装する。
+  現在は Vite の import で解決し、手動コピー処理は設けない。
 - Vite によるアセット出力・URL 生成を優先する。コピーが必要な場合は自動化し、
   ビルド出力に古い WASM が残らないようにする。手動コピーを運用手順にしない。
 - 出力名は内容ハッシュまたはビルド識別子で区別し、移行後に旧 WASM を再利用しない。

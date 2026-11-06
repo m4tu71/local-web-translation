@@ -19,14 +19,14 @@ PLaMo 3 Translate をブラウザ内で実行する静的翻訳アプリ（開�
 | wllama 3.12.0 相当 | 通常版・compat 版を vendor/wllama/ に保存。ハッシュと版整合を確認 |
 | アプリへの wllama 導入 | 通常版・compat 版をローカル tarball から導入済み。lockfile 更新済み |
 | 依存の復元 | npm ci --offline で成功。両 WASM のハッシュも manifest と一致 |
-| WASM / Worker の組み込み | 未実装 |
+| WASM / Worker の組み込み | 依存からの読み込み設定と dev / preview での HTTP 配信を確認。ブラウザ内の初期化は未検証 |
 | モデル取得・ロード・翻訳 | 未実装・未検証 |
 | OPFS・期限管理・オフライン利用 | 未実装 |
 | GitHub Actions / Pages 公開 | 未設定・未検証 |
 
 準備ブランチでは開発環境・成果物・文書を整備しました。
-現在の feat/wllama-integration ブランチでは依存導入・復元確認を終え、次に WASM の組み込み、
-推論アダプター、1 文翻訳の PoC を進めます。
+現在の feat/wllama-integration ブランチでは依存導入・復元確認とアセットの読み込み設定を終え、
+次にモデル操作を扱う推論アダプター、1 文翻訳の PoC を進めます。
 ブラウザ操作は自動化せず、実際のロード・翻訳は手動検証の結果が得られるまで未検証として扱います。
 
 ## ローカル開発
@@ -54,4 +54,5 @@ dist/ が配信対象です。モデル重みは含めません。
 
 アプリケーションのソースは [MIT](LICENSE) です。PLaMo モデルは別の PLaMo Community License に従います。
 wllama と依存コードのライセンス・著作権表示は配布パッケージ内に保持します。
+ブラウザ配信分の表示は [第三者ライセンス](public/THIRD_PARTY_NOTICES.txt) に含めます。
 

@@ -91,6 +91,8 @@ docs/development-environment.md  # この定義
 index.html                       # エントリーポイント
 src/main.ts                      # 起動処理
 src/styles/                      # CSS
+src/inference/wllama-runtime.ts   # wllama のアセット設定
+public/THIRD_PARTY_NOTICES.txt    # 配信に含めるライセンス表示
 vendor/wllama/                   # 自前ビルド済み tarball 2 個と manifest
 vite.config.ts
 tsconfig.json
@@ -102,8 +104,8 @@ dist/                            # ビルド成果物、Git 管理外
 .ai/                             # 調査・検証記録、Git 管理外
 ```
 
-src/ui/、src/inference/、src/storage/、public/ は未作成で、必要になった時点で追加する。
-WASM はインストール済み依存から Vite で解決する方針とし、コピーが必要な場合も自動化する。
+src/ui/、src/storage/ は未作成で、必要になった時点で追加する。
+WASM はインストール済み依存から Vite で解決し、Worker コードは同じ依存から取り込む。
 モデル重みは public/、src/、dist/、Git 管理対象のいずれにも置かず、
 Hugging Face からブラウザが直接取得して OPFS に保存する。
 
@@ -112,9 +114,9 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 エンジン導入時は [推論エンジンの導入・切り替え方針](inference-engine-integration.md) に従う。
 自前ビルドと公式 npm 版を同じパッケージ名で扱い、アダプターとアセット解決を分離する。
 
-- PoC 候補の wllama 3.12.0 相当はビルド・保存・静的確認・依存導入済み。WASM の組み込みと実行検証は次の工程。
+- PoC 候補の wllama 3.12.0 相当はビルド・保存・静的確認・依存導入・アセット設定済み。実行検証は次の工程。
   最終採用は PLaMo 3 のロード・翻訳結果に基づいて決める。
-- WASM アセットの配置、Worker、WebGPU、WASM スレッド数はエンジン要件を確認して定義する。
+- WASM / Worker は依存から取り込み済み。WebGPU と WASM スレッド数はモデル操作の実装時に定義する。
 - マルチスレッド WASM が要求するクロスオリジン分離は、GitHub Pages での成立条件も検証する。
   開発サーバーだけにヘッダーを追加して公開環境でも動くとは判断しない。
 - Service Worker とオフライン対応は初期構築に含めず、推論 PoC 後に設計する。
@@ -134,7 +136,7 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 - npm ci --offline によるローカルキャッシュからの再インストール成功。
 - npm run build 成功（アプリと Vite 設定の型検査を含む）。
 - 開発サーバーと preview のサブパスで HTML・JavaScript・CSS の HTTP 200 を確認。
-- dist/ は HTML・JavaScript・CSS の 3 ファイルのみ。モデル重みは含まれない。
+- dist/ は HTML・JavaScript・CSS、両版の WASM、第三者ライセンスを含む。モデル重みは含まれない。
 - npm 10.9.10 への更新後に依存復元・型検査・ビルドを確認。2026-11-06 の npm audit は既知の脆弱性 0 件。
   この監査は wllama の依存導入前の結果で、自前 tarball 内部のコードは含まれない。
 - ブラウザ操作は自動化しない。実ブラウザの表示・JavaScript 実行は未確認。
@@ -142,7 +144,9 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
   ローカル tarball から通常版・compat 版の依存導入後、npm ls と型検査・ビルドが成功。
   依存追加後も npm ci --offline で 21 パッケージの復元に成功。
   復元した両 WASM の SHA-256 が manifest と一致し、型検査・ビルドも成功。
-  WASM / Worker の組み込み、モデル取得、OPFS、デプロイは未実装。
+  WASM / Worker の読み込み設定と dev / preview のサブパスでの HTTP 配信を確認。
+  配信された両 WASM の SHA-256 も manifest と一致。ブラウザ内の初期化は未検証。
+  モデル取得・ロード・翻訳、OPFS、デプロイは未実装。
 
 ## 参照
 
