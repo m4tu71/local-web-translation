@@ -3,6 +3,9 @@
 状態: 自前ビルド成果物を保存・静的確認し、通常版・compat 版を dependencies へ導入済み。
 lockfile 更新、npm ls、型検査・ビルド、WASM の HTTP 配信まで確認。ブラウザ内の初期化・推論実行は未検証。
 
+ロード・翻訳・中止・破棄・状態通知を扱う [推論 API](inference-api.md) を実装し、モックで検証済み。
+実モデルの取得と PoC 画面は次の工程。
+
 具体的な構築コマンドは [wllama の自前ビルド手順](wllama-self-build.md) を参照。
 保存した版と検証範囲は [成果物の確認結果](wllama-build-verification.md) を参照。
 
@@ -45,12 +48,12 @@ tokenizer.ggml.model = plamo3 を認識しないため、自前ビルドを PoC 
 ## アプリとの境界
 
 ```text
-UI → InferenceEngine → WllamaEngine → @wllama/wllama
-           ↑                ↑
-   OPFS からのモデル    PFML3 プロンプト
+UI → InferenceEngine / InferenceController → wllama アダプター → @wllama/wllama
+                       ↑
+              取得済み Blob / File、PFML3
 ```
 
-- src/inference/ 内にアプリ独自の InferenceEngine 型と WllamaEngine アダプターを置く。
+- src/inference/ 内に InferenceEngine 型、InferenceController、wllama アダプターを実装済み。
 - UI はロード・翻訳・中止・破棄・状態通知をアプリ独自の型で扱う。
   wllama の型・オプション・レスポンスを UI やストレージ層へ公開しない。
 - エンジン固有の import、API 呼び出し、エラー変換、バックエンド設定はアダプターへ集約する。
@@ -62,8 +65,9 @@ UI → InferenceEngine → WllamaEngine → @wllama/wllama
 ## JS・Worker・WASM の整合
 
 読み込み設定は src/inference/wllama-runtime.ts に実装済み。
-src/main.ts から遅延 import し、Wllama インスタンスにアセットの取得元を設定する。
-ここでは loadModel を呼ばず、WASM の取得・Worker 起動・モデル取得・推論は開始しない。
+src/main.ts はアプリ独自 API の状態通知を購読する。実際の loadModel 呼び出し時に
+wllama モジュールを遅延 import し、インスタンスへアセットの取得元を設定する。
+ページ起動や状態通知の購読だけでは WASM の取得・Worker 起動・モデル取得・推論は開始しない。
 
 | アセット | 解決方法 |
 | --- | --- |

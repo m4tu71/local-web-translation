@@ -78,11 +78,14 @@ Worker を導入するときは DOM と WebWorker の型が衝突しない構成
 | --- | --- |
 | npm run dev | vite |
 | npm run typecheck | tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json |
+| npm test | Node.js 標準テストランナーで推論 API のモックテスト |
 | npm run build | npm run typecheck && vite build |
 | npm run preview | vite preview |
 
 Vite 単体では型検査しないため、本番ビルドの前に型検査を必須とする。
-ESLint、整形ツール、テストランナーは初期構築の必須依存に含めず、必要な段階で定義する。
+テストは Node.js の型除去機能を使用する。src/ 内の .ts 拡張子付き import を許可するが、
+noEmit は維持し、ブラウザ向けの変換・出力は Vite が行う。
+ESLint・整形ツール・外部テストランナーは未導入。
 
 ## ファイル構成
 
@@ -91,7 +94,8 @@ docs/development-environment.md  # この定義
 index.html                       # エントリーポイント
 src/main.ts                      # 起動処理
 src/styles/                      # CSS
-src/inference/wllama-runtime.ts   # wllama のアセット設定
+src/inference/                    # UI 非依存 API、PFML3、wllama アダプター
+tests/                            # 推論 API / wllama クライアントのモックテスト
 public/THIRD_PARTY_NOTICES.txt    # 配信に含めるライセンス表示
 vendor/wllama/                   # 自前ビルド済み tarball 2 個と manifest
 vite.config.ts
@@ -146,7 +150,8 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
   復元した両 WASM の SHA-256 が manifest と一致し、型検査・ビルドも成功。
   WASM / Worker の読み込み設定と dev / preview のサブパスでの HTTP 配信を確認。
   配信された両 WASM の SHA-256 も manifest と一致。ブラウザ内の初期化は未検証。
-  モデル取得・ロード・翻訳、OPFS、デプロイは未実装。
+  推論 API のロード・翻訳・中止・破棄・状態通知は実装し、モックで検証済み。
+  モデル取得・PoC 画面、OPFS、デプロイは未実装。実モデルのロード・翻訳は未検証。
 
 ## 参照
 
