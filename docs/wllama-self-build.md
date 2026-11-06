@@ -13,7 +13,7 @@ WSL・Docker の準備状況、ビルド成功、ブラウザでのロード・�
 | llama.cpp submodule | d38bea34227bbf9069d62fdc239c98ab6e05435a |
 | Emscripten Docker イメージ | emscripten/emsdk:4.0.20（x86_64 を想定） |
 | Dawn | v20260317.182325 |
-| ホスト Node.js / npm | 22.23.4 / 10.9.9 |
+| ホスト Node.js / npm | 22.23.4 / 10.9.10 |
 
 自前ビルドを npm の公式リリース 3.12.0 と区別するため、成果物名にコミットを付ける。
 パッケージ内部の name / version は upstream のまま維持する。
@@ -37,7 +37,7 @@ PowerShell のまま bash スクリプトを実行しない。
 
 - WSL 2 と Linux ディストリビューション。
 - Docker Engine と Compose v2。Docker Desktop を使う場合は対象 WSL との連携。
-- WSL 内の Git、Node.js 22.23.4、npm 10.9.9。
+- WSL 内の Git、Node.js 22.23.4、npm 10.9.10。
 - GitHub・npm・Docker レジストリ・Linux パッケージ配布先へのネットワーク接続。
 - C++ / WASM のコンパイル用の空きメモリとディスク。必要量・所要時間は未測定。
 
@@ -96,7 +96,7 @@ git submodule status --recursive
 
 ```bash
 test "$(node --version)" = v22.23.4
-test "$(npm --version)" = 10.9.9
+test "$(npm --version)" = 10.9.10
 test "$(uname -m)" = x86_64
 
 # ブラウザの自動インストールは不要。ブラウザテストもこの手順では実行しない。
