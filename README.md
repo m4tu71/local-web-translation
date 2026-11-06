@@ -4,5 +4,26 @@ PLaMo 3 Translate をブラウザ内で実行する静的翻訳アプリ（開�
 
 開発方針は Vanilla TypeScript + HTML + CSS + Vite。UI フレームワークは使用しません。
 
-- [開発環境の定義](docs/development-environment.md)（環境構築は未実施）
+- [開発環境の定義と確認結果](docs/development-environment.md)
+
+## ローカル開発
+
+Node.js 22.23.4 / npm 10.9.9 を使用します。
+
+```sh
+npm ci
+npm run dev
+```
+
+http://localhost:5173/local-web-translation/ を開いてください。
+最小限の起動確認ページのみ実装しています。モデルの読み込み・翻訳機能は未実装です。
+
+```sh
+npm run typecheck
+npm run build
+npm run preview
+```
+
+本番ビルドのプレビューは http://localhost:4173/local-web-translation/ です。
+dist/ が配信対象です。モデル重みは含めません。
 

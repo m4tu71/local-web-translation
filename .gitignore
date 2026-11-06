@@ -48,6 +48,15 @@ web_modules/
 # TypeScript cache
 *.tsbuildinfo
 
+# Vite caches and local overrides
+.vite/
+.vite-temp/
+*.local
+
+# Model weights and partial downloads (keep outside Git)
+*.gguf
+*.gguf.part
+
 # Optional npm cache directory
 .npm
 
@@ -142,4 +151,5 @@ dist
 
 
 
+# Local agent research and work logs
 .ai/

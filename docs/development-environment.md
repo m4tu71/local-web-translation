@@ -1,6 +1,7 @@
 # 開発環境の定義
 
-状態: 定義のみ。環境構築・依存関係のインストール・動作検証は未実施。
+状態: 開発環境を構築済み。依存関係の復元・型検査・ビルド・HTTP 配信を確認済み。
+実ブラウザでの画面表示と推論機能は未検証。
 
 ## 採用構成
 
@@ -8,17 +9,17 @@
 | --- | --- |
 | UI | 標準 HTML、Vanilla CSS、Vanilla TypeScript |
 | フレームワーク | React / Vue などは使用しない |
-| ビルドツール | Vite（vanilla-ts 相当の構成） |
+| ビルドツール | Vite 8.3.6（vanilla-ts 相当の構成） |
 | Node.js | 初期基準は 22.23.4。ローカルと将来の CI で同一バージョンを使用 |
 | パッケージ管理 | npm。初期基準は 10.9.9 |
 | モジュール | ES Modules（package.json の type: module） |
-| 最初の開発依存 | vite、typescript、@types/node |
+| 最初の開発依存 | vite 8.3.6、typescript 7.0.2、@types/node 22.20.5 |
 | 最初の実行時依存 | なし。推論エンジンは互換性調査後に追加 |
 | 配信 | dist/ の静的ファイルを GitHub Pages へ公開 |
 
 Node.js / npm は現在のローカル環境でバージョンを確認済み。Vite の公式要件は
 Node.js 20.19+ または 22.12+。Node.js 22 系を使用する間も保守期限と更新を確認する。
-構築時に Vite / TypeScript / @types/node の安定版と相互互換性を確認し、
+構築時に npm レジストリで安定版を確認し、型検査とビルドの成功を確認した。
 正確なバージョンを package.json に記載する。package-lock.json を Git 管理し、
 以後の再構築・CI は npm ci を使用する。プレリリースは採用しない。
 
@@ -26,7 +27,7 @@ Node.js 20.19+ または 22.12+。Node.js 22 系を使用する間も保守期�
 
 ## Vite 設定
 
-構築時に作成する vite.config.ts の初期定義:
+vite.config.ts の初期設定:
 
 ```typescript
 import { defineConfig } from 'vite';
@@ -66,7 +67,7 @@ lib: ES2022 / DOM / DOM.Iterable、types: vite/client を初期値とする。
 Vite 設定は Node.js 用 tsconfig.node.json に分け、Node 型を指定する。
 Worker を導入するときは DOM と WebWorker の型が衝突しない構成を追加する。
 
-構築時に定義する npm scripts:
+定義済みの npm scripts:
 
 | コマンド | 内容 |
 | --- | --- |
@@ -120,6 +121,17 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 4. dist/ にモデル重みが含まれず、推論 API やバックエンドを必要としない。
 
 この完了条件はビルド環境の確認であり、モデルのロード・翻訳成功を意味しない。
+
+## 構築時の確認結果
+
+- npm ci --offline によるローカルキャッシュからの再インストール成功。
+- npm run build 成功（アプリと Vite 設定の型検査を含む）。
+- 開発サーバーと preview のサブパスで HTML・JavaScript・CSS の HTTP 200 を確認。
+- dist/ は HTML・JavaScript・CSS の 3 ファイルのみ。モデル重みは含まれない。
+- 初回 npm install の監査結果は既知の脆弱性 0 件。
+- ブラウザ接続機能が利用できず、Chrome の UI 操作もツール側で許可されなかったため、
+  実ブラウザの表示・JavaScript 実行は未確認。
+- 推論エンジン、モデル取得、OPFS、デプロイは未実装。
 
 ## 参照
 
