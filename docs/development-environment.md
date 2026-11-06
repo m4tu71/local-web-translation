@@ -14,7 +14,7 @@
 | パッケージ管理 | npm。基準は 10.9.10 |
 | モジュール | ES Modules（package.json の type: module） |
 | 最初の開発依存 | vite 8.3.6、typescript 7.0.2、@types/node 22.20.5 |
-| 現在の実行時依存 | なし。保存済み wllama の導入は次の工程 |
+| 現在の実行時依存 | @wllama/wllama・@wllama/wllama-compat 3.12.0（保存済みローカル tarball） |
 | 公開先の方針 | dist/ の静的ファイルを GitHub Pages へ公開（未設定） |
 
 Node.js / npm は現在のローカル環境でバージョンを確認済み。Vite の公式要件は
@@ -112,7 +112,7 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 エンジン導入時は [推論エンジンの導入・切り替え方針](inference-engine-integration.md) に従う。
 自前ビルドと公式 npm 版を同じパッケージ名で扱い、アダプターとアセット解決を分離する。
 
-- PoC 候補の wllama 3.12.0 相当はビルド・保存・静的確認済み。依存への導入と実行検証は次の工程。
+- PoC 候補の wllama 3.12.0 相当はビルド・保存・静的確認・依存導入済み。WASM の組み込みと実行検証は次の工程。
   最終採用は PLaMo 3 のロード・翻訳結果に基づいて決める。
 - WASM アセットの配置、Worker、WebGPU、WASM スレッド数はエンジン要件を確認して定義する。
 - マルチスレッド WASM が要求するクロスオリジン分離は、GitHub Pages での成立条件も検証する。
@@ -136,10 +136,12 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 - 開発サーバーと preview のサブパスで HTML・JavaScript・CSS の HTTP 200 を確認。
 - dist/ は HTML・JavaScript・CSS の 3 ファイルのみ。モデル重みは含まれない。
 - npm 10.9.10 への更新後に依存復元・型検査・ビルドを確認。2026-11-06 の npm audit は既知の脆弱性 0 件。
-  wllama はアプリの依存へ未導入であり、この監査に自前 tarball 内部のコードは含まれない。
+  この監査は wllama の依存導入前の結果で、自前 tarball 内部のコードは含まれない。
 - ブラウザ操作は自動化しない。実ブラウザの表示・JavaScript 実行は未確認。
 - wllama の保存済み成果物は [静的確認済み](wllama-build-verification.md)。
-  アプリへの組み込み、モデル取得、OPFS、デプロイは未実装。
+  ローカル tarball から通常版・compat 版の依存導入後、npm ls と型検査・ビルドが成功。
+  依存追加後の npm ci による復元はまだ確認していない。
+  WASM / Worker の組み込み、モデル取得、OPFS、デプロイは未実装。
 
 ## 参照
 

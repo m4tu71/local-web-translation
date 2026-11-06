@@ -19,5 +19,9 @@
     "@types/node": "22.20.5",
     "typescript": "7.0.2",
     "vite": "8.3.6"
+  },
+  "dependencies": {
+    "@wllama/wllama": "file:vendor/wllama/wllama-3.12.0-c10c211.tgz",
+    "@wllama/wllama-compat": "file:vendor/wllama/wllama-compat-3.12.0-c10c211.tgz"
   }
 }

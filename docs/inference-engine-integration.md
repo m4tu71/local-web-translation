@@ -1,7 +1,7 @@
 # 推論エンジンの導入・切り替え方針
 
-状態: 自前ビルド成果物を保存・静的確認済み。以下のアプリ組み込み方針は未実装。
-依存への導入・WASM の配信・推論実行は未実施。
+状態: 自前ビルド成果物を保存・静的確認し、通常版・compat 版を dependencies へ導入済み。
+lockfile 更新、npm ls、型検査・ビルドまで確認。WASM の配信・推論実行は未実施。
 
 具体的な構築コマンドは [wllama の自前ビルド手順](wllama-self-build.md) を参照。
 保存した版と検証範囲は [成果物の確認結果](wllama-build-verification.md) を参照。
@@ -22,14 +22,15 @@ PLaMo 3 対応を含む自前ビルドで PoC を進め、公式 npm 版の対�
 | 自前ビルド | file:vendor/wllama/wllama-3.12.0-c10c211.tgz |
 | 公式版へ移行後 | 対応を検証した公式 npm 版の完全固定バージョン |
 
-上記 tarball と対応する compat 版は vendor/wllama/ に保存済み。依存指定への追加は次の工程。
+上記 tarball と対応する compat 版は vendor/wllama/ に保存し、依存指定へ追加済み。
 3.12.0 は調査した開発ソースの表記で、公式 npm 公開版・動作確認済み版を意味しない。
 保存済み成果物の対象は wllama commit c10c21114984e37fe6ba4edbba446c28c5b7a954 と、
 その submodule の llama.cpp d38bea34227bbf9069d62fdc239c98ab6e05435a。
 
 vendor/ の通常版・compat 版 tarball と manifest は Git 管理済み。
 .gitignore の *.tgz に対して当該 2 ファイルだけの例外を追加済み。
-導入時に package-lock.json を更新し、以後の開発・CI は npm ci だけで依存を復元する。
+導入時に package-lock.json を更新済み。以後の開発・CI は npm ci で依存を復元する。
+依存追加後の npm ci による復元確認は次の工程。
 Docker / Emscripten は自前パッケージの作成時に必要とし、アプリの通常ビルドには要求しない。
 モデル重みが含まれず、ライセンスが同梱されていることは静的確認済み。
 
