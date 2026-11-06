@@ -17,7 +17,8 @@ translation application powered by PLaMo 3 Translate.
 - Keep model weights outside the Git repository.
 
 ## Development
-- Use TypeScript, React, and Vite.
+- Use TypeScript and Vite.
+- Do not use React, Vue, or other UI frameworks.
 - Verify browser engine and model compatibility.
 - Never claim inference works without testing it.
 - Keep large model files out of the build output.
