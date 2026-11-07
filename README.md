@@ -9,6 +9,7 @@ PLaMo 3 Translate をブラウザ内で実行する静的翻訳アプリ（開�
 - [推論 API とライフサイクル](docs/inference-api.md)
 - [モデルの取得と進捗表示](docs/model-download.md)
 - [OPFS によるモデルキャッシュ](docs/model-cache.md)
+- [GitHub Actions と GitHub Pages](docs/github-pages.md)
 - [日本語→英語の手動検証画面](docs/translation-poc.md)
 - [wllama の自前ビルド手順](docs/wllama-self-build.md)
 - [wllama 成果物の確認結果](docs/wllama-build-verification.md)
@@ -30,7 +31,8 @@ PLaMo 3 Translate をブラウザ内で実行する静的翻訳アプリ（開�
 | 翻訳検証画面 | 利用者が GPU / CPU の両経路で1文翻訳・上限未到達・ロード解除を確認。ログを保存済み |
 | OPFS キャッシュ・期限管理 | 実装済み。模擬 OPFS のテストと、実ブラウザーでの手動確認状況は[キャッシュ文書](docs/model-cache.md)を参照 |
 | アプリ全体のオフライン利用 | 未実装。モデルの OPFS 保存だけではオフライン起動を保証しない |
-| GitHub Actions / Pages 公開 | 未設定・未検証 |
+| GitHub Actions CI | PR / main 用 workflow を追加。2026-11-08、PR #2 の commit `897638a` で成功（[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この結果は当該 commit の検証で、後続 commit は各 workflow 実行で確認 |
+| GitHub Pages 公開 | main 用 workflow を追加。Settings の Source 設定と実公開は未確認 |
 
 準備ブランチでは開発環境・成果物・文書を整備しました。
 依存導入・復元確認とアセットの読み込み設定を終え、feat/inference-poc ブランチで
@@ -60,6 +62,8 @@ npm run preview
 
 本番ビルドのプレビューは http://localhost:4173/local-web-translation/ です。
 dist/ が配信対象です。モデル重みは含めません。
+
+GitHub Pages の有効化と公開後の手動確認は[手順書](docs/github-pages.md)を参照してください。
 
 ## ライセンス
 
