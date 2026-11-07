@@ -78,6 +78,7 @@ button:focus-visible,
 a:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
+input:focus-visible,
 summary:focus-visible,
 pre:focus-visible,
 .translation-output:focus-visible {
@@ -91,7 +92,8 @@ pre:focus-visible,
 }
 
 textarea,
-select {
+select,
+input[type='number'] {
   display: block;
   box-sizing: border-box;
   width: 100%;
@@ -102,6 +104,14 @@ select {
   background: #fff;
   color: #202124;
   font: inherit;
+}
+
+select {
+  min-height: 44px;
+}
+
+input[type='number'] {
+  min-height: 44px;
 }
 
 textarea {

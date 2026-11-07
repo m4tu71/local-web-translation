@@ -3,6 +3,8 @@ import type { InferenceEngine, InferenceState, ModelLoadOptions, TranslationResu
 
 interface ModelSource {
   getModel(): Blob | undefined;
+  acquireModel?(signal?: AbortSignal): Promise<{ model: Blob; release(): Promise<void> }>;
+  markUsed?(): Promise<void>;
   subscribe(listener: () => void): () => void;
 }
 
@@ -14,6 +16,7 @@ export interface PocResult extends TranslationResult {
 
 export interface TranslationSessionState {
   readonly operation: PocOperation;
+  readonly cancelling: boolean;
   readonly engine: InferenceState;
   readonly hasModelFile: boolean;
   readonly modelInUse: boolean;
@@ -45,6 +48,10 @@ export class TranslationSession {
   private state: TranslationSessionState;
   private engine?: InferenceEngine;
   private unsubscribeEngine?: () => void;
+  private releaseModelLease?: () => Promise<void>;
+  private operationController?: AbortController;
+  private operationCompletion?: Promise<void>;
+  private resolveOperationCompletion?: () => void;
   private listeners = new Set<(state: TranslationSessionState) => void>();
   private readonly modelSource: ModelSource;
   private readonly createEngine: () => InferenceEngine;
@@ -60,6 +67,7 @@ export class TranslationSession {
     this.now = now;
     this.state = Object.freeze({
       operation: 'idle',
+      cancelling: false,
       engine: EMPTY_ENGINE_STATE,
       hasModelFile: Boolean(modelSource.getModel()),
       modelInUse: false,
@@ -84,8 +92,7 @@ export class TranslationSession {
 
   async load(backend: 'auto' | 'cpu'): Promise<void> {
     this.assertIdle();
-    const model = this.modelSource.getModel();
-    if (!model) {
+    if (!this.modelSource.getModel()) {
       throw new Error('先にモデルを取得してください。');
     }
     if (this.state.engine.modelLoaded) {
@@ -93,6 +100,9 @@ export class TranslationSession {
     }
 
     const started = this.now();
+    const controller = new AbortController();
+    this.operationController = controller;
+    this.operationCompletion = new Promise<void>(resolve => { this.resolveOperationCompletion = resolve; });
     this.update({
       operation: 'loading',
       modelInUse: true,
@@ -106,6 +116,11 @@ export class TranslationSession {
     try {
       // A cancelled/failed engine may still own resources. Dispose before retry.
       await this.releaseEngine();
+      const lease = await this.modelSource.acquireModel?.(controller.signal);
+      this.releaseModelLease = lease?.release;
+      controller.signal.throwIfAborted();
+      const model = lease?.model ?? this.modelSource.getModel();
+      if (!model) throw new Error('モデルを読み取れません。もう一度取得してください。');
       this.engine = this.createEngine();
       this.unsubscribeEngine = this.engine.subscribe(engine => {
         if (engine.phase !== this.state.engine.phase) {
@@ -114,12 +129,21 @@ export class TranslationSession {
         this.update({ engine });
       });
       await this.engine.loadModel([model], { backend, contextSize: 2048, threads: 1 });
+      await this.touchModelCache();
       this.log(`ロード完了: ${this.elapsed(started)} ms`);
     } catch (error) {
       this.reportError(error);
       throw error;
     } finally {
-      this.update({ operation: 'idle', modelInUse: Boolean(this.engine) });
+      if (!this.engine && this.releaseModelLease) {
+        await this.releaseModelLease();
+        this.releaseModelLease = undefined;
+      }
+      this.operationController = undefined;
+      this.update({ operation: 'idle', cancelling: false, modelInUse: Boolean(this.engine) });
+      this.resolveOperationCompletion?.();
+      this.resolveOperationCompletion = undefined;
+      this.operationCompletion = undefined;
     }
   }
 
@@ -131,6 +155,7 @@ export class TranslationSession {
 
     const engine = this.engine;
     const started = this.now();
+    this.operationController = new AbortController();
     this.update({ operation: 'translating', result: undefined, notice: undefined, error: undefined });
     this.log('翻訳開始: ja → en, maxTokens=512');
 
@@ -143,23 +168,32 @@ export class TranslationSession {
       });
       const elapsedMs = this.elapsed(started);
       this.update({ result: Object.freeze({ ...result, elapsedMs }) });
+      await this.touchModelCache();
       this.log(`翻訳終了: ${elapsedMs} ms, truncated=${result.truncated}`);
     } catch (error) {
       this.reportError(error);
       throw error;
     } finally {
-      this.update({ operation: 'idle' });
+      this.operationController = undefined;
+      this.update({ operation: 'idle', cancelling: false });
     }
   }
 
   async abort(): Promise<void> {
-    if (!this.engine || !['loading', 'translating'].includes(this.state.operation)) {
+    if (!['loading', 'translating'].includes(this.state.operation)) {
       return;
     }
 
     this.log('中止を要求しました。操作の終了とリソース解放を待ちます。');
+    this.operationController?.abort();
+    this.update({ cancelling: true });
+    if (!this.engine) {
+      await this.operationCompletion;
+      return;
+    }
     try {
       await this.engine.abort();
+      await this.operationCompletion;
     } catch (error) {
       this.reportError(error);
       throw error;
@@ -173,8 +207,8 @@ export class TranslationSession {
 
     try {
       await this.releaseEngine();
-      this.update({ notice: 'ロードを解除しました。取得済みのモデルはページ内に保持しています。' });
-      this.log('ロード解除完了。取得済みのモデルはページ内に保持しています。');
+      this.update({ notice: 'ロードを解除しました。取得済みのモデルは選択した保存先に保持しています。' });
+      this.log('ロード解除完了。取得済みのモデルは選択した保存先に保持しています。');
     } catch (error) {
       this.reportError(error);
       throw error;
@@ -196,7 +230,21 @@ export class TranslationSession {
       this.unsubscribeEngine = undefined;
       this.engine = undefined;
     }
+    if (this.releaseModelLease) {
+      await this.releaseModelLease();
+      this.releaseModelLease = undefined;
+    }
     this.update({ engine: EMPTY_ENGINE_STATE });
+  }
+
+  private async touchModelCache(): Promise<void> {
+    try {
+      await this.modelSource.markUsed?.();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '保存日時を更新できませんでした。';
+      this.update({ notice: `処理は完了しましたが、モデルの保存日時を更新できませんでした。${message}` });
+      this.log(`モデルキャッシュの最終使用日時を更新できませんでした: ${message}`);
+    }
   }
 
   private assertIdle(): void {
@@ -210,7 +258,8 @@ export class TranslationSession {
   }
 
   private reportError(error: unknown): void {
-    if (error instanceof InferenceError && error.code === 'cancelled') {
+    if ((error instanceof InferenceError && error.code === 'cancelled') ||
+        (typeof error === 'object' && error !== null && 'code' in error && error.code === 'cancelled')) {
       this.update({
         result: undefined,
         notice: '操作を中止しました。再実行するにはモデルをロードしてください。',

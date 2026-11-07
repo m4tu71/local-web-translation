@@ -104,6 +104,55 @@ test('load/translation controls and model deletion lock follow the busy state', 
   assert.equal(session.getState().modelInUse, false);
 });
 
+test('cancelling while OPFS verification waits prevents inference from starting', async () => {
+  const acquiring = deferred();
+  const { session, source, calls } = fixture();
+  source.acquireModel = signal => new Promise((_resolve, reject) => {
+    acquiring.resolve(signal);
+    signal.addEventListener('abort', () => reject({ code: 'cancelled' }), { once: true });
+  });
+
+  const loading = assert.rejects(session.load('auto'), { code: 'cancelled' });
+  const signal = await acquiring.promise;
+  assert.equal(session.getState().operation, 'loading');
+  assert.equal(describeTranslation(session.getState(), '日本語').canAbort, true);
+  await session.abort();
+  await loading;
+  assert.equal(signal.aborted, true);
+  assert.equal(calls.factories, 0);
+  assert.equal(session.getState().modelInUse, false);
+});
+
+test('an OPFS use lease stays held when engine disposal fails, then releases after retry', async () => {
+  let releases = 0;
+  let disposeAttempts = 0;
+  const { session, source } = fixture({
+    async dispose() {
+      if (++disposeAttempts === 1) throw new Error('release failed');
+    },
+  });
+  source.acquireModel = async () => ({ model: await source.getModel(), async release() { releases++; } });
+  await session.load('auto');
+  await assert.rejects(session.unload(), { code: 'dispose-failed' });
+  assert.equal(releases, 0);
+  assert.equal(session.getState().modelInUse, true);
+  await session.unload();
+  assert.equal(releases, 1);
+  assert.equal(session.getState().modelInUse, false);
+});
+
+test('cache timestamp failures stay visible without turning successful inference into failure', async () => {
+  const { session, source } = fixture();
+  source.markUsed = async () => { throw new Error('storage unavailable'); };
+  await session.load('auto');
+  assert.equal(session.getState().engine.modelLoaded, true);
+  assert.match(session.getState().notice, /保存日時を更新できません/);
+  await session.translate('こんにちは');
+  assert.equal(session.getState().result.text, 'The meeting has been moved to next Monday.');
+  assert.match(session.getState().notice, /storage unavailable/);
+  await session.unload();
+});
+
 test('cancelled translation exposes no stale result and can reload without re-downloading', async () => {
   const entered = deferred();
   const { session, source, calls } = fixture({

@@ -31,6 +31,13 @@ function deferred() {
   return { promise, resolve };
 }
 
+async function memoryDownloader(model = fixtureModel, fetcher) {
+  const downloader = new ModelDownloader(model, fetcher);
+  await downloader.initialize();
+  downloader.setStorageMode('memory');
+  return downloader;
+}
+
 test('production URL pins the exact revision, file, size and hash', () => {
   assert.equal(modelDownloadUrl(PLAMO_MODEL),
     'https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/resolve/' +
@@ -48,13 +55,13 @@ test('creation and subscription never start a network request', () => {
 
   assert.equal(calls, 0);
   assert.equal(downloader.getModel(), undefined);
-  assert.equal(states[0].phase, 'idle');
+  assert.equal(states[0].phase, 'checking');
   assert(Object.isFrozen(states[0]));
 });
 
 test('streaming receive reports byte counts and returns only the verified Blob', async () => {
   let requestedUrl, options;
-  const downloader = new ModelDownloader(fixtureModel, async (url, init) => {
+  const downloader = await memoryDownloader(fixtureModel, async (url, init) => {
     requestedUrl = url;
     options = init;
     return fixtureResponse();
@@ -80,7 +87,7 @@ test('streaming receive reports byte counts and returns only the verified Blob',
 
 test('HTTP and partial responses cannot become ready', async () => {
   for (const status of [404, 403, 500, 206]) {
-    const downloader = new ModelDownloader(fixtureModel, async () => new Response('error', { status }));
+    const downloader = await memoryDownloader(fixtureModel, async () => new Response('error', { status }));
     await assert.rejects(downloader.download(), { code: 'http' });
     assert.equal(downloader.getState().phase, 'error');
     assert.match(downloader.getState().error.message, new RegExp(String(status)));
@@ -89,7 +96,7 @@ test('HTTP and partial responses cannot become ready', async () => {
 });
 
 test('missing stream support is reported explicitly', async () => {
-  const downloader = new ModelDownloader(fixtureModel, async () => new Response(null));
+  const downloader = await memoryDownloader(fixtureModel, async () => new Response(null));
   await assert.rejects(downloader.download(), { code: 'unsupported' });
   assert.equal(downloader.getState().phase, 'error');
 });
@@ -99,7 +106,7 @@ test('short and oversized bodies fail integrity checks and release the stream', 
   const longer = new Uint8Array([...fixtureBytes, 0]);
 
   for (const bytes of [shorter, longer]) {
-    const downloader = new ModelDownloader(fixtureModel, async () => fixtureResponse(bytes));
+    const downloader = await memoryDownloader(fixtureModel, async () => fixtureResponse(bytes));
     await assert.rejects(downloader.download(), { code: 'integrity' });
     assert.equal(downloader.getModel(), undefined);
     assert(downloader.getState().loadedBytes <= fixtureModel.bytes);
@@ -109,7 +116,7 @@ test('short and oversized bodies fail integrity checks and release the stream', 
 test('same-sized corrupt data fails the SHA-256 check', async () => {
   const corrupted = fixtureBytes.slice();
   corrupted[corrupted.length - 1] ^= 1;
-  const downloader = new ModelDownloader(fixtureModel, async () => fixtureResponse(corrupted));
+  const downloader = await memoryDownloader(fixtureModel, async () => fixtureResponse(corrupted));
 
   await assert.rejects(downloader.download(), { code: 'integrity' });
   assert.match(downloader.getState().error.message, /SHA-256/);
@@ -118,7 +125,7 @@ test('same-sized corrupt data fails the SHA-256 check', async () => {
 
 test('network and stream failures can be retried with a fresh full request', async () => {
   let attempts = 0;
-  const downloader = new ModelDownloader(fixtureModel, async () => {
+  const downloader = await memoryDownloader(fixtureModel, async () => {
     attempts++;
     if (attempts === 1) {
       throw new TypeError('network failure');
@@ -140,7 +147,7 @@ test('network and stream failures can be retried with a fresh full request', asy
 
 test('abort before the request starts does not make a network request', async () => {
   let calls = 0;
-  const downloader = new ModelDownloader(fixtureModel, async () => {
+  const downloader = await memoryDownloader(fixtureModel, async () => {
     calls++;
     return fixtureResponse();
   });
@@ -153,7 +160,7 @@ test('abort before the request starts does not make a network request', async ()
 });
 
 test('repeated abort from a cancelling subscriber waits for the same operation', async () => {
-  const downloader = new ModelDownloader(fixtureModel, async () => fixtureResponse());
+  const downloader = await memoryDownloader(fixtureModel, async () => fixtureResponse());
   let repeatedAbort;
   downloader.subscribe(state => {
     if (state.phase === 'cancelling') repeatedAbort = downloader.abort();
@@ -168,7 +175,7 @@ test('repeated abort from a cancelling subscriber waits for the same operation',
 test('abort cancels a pending body read and discards partial data', async () => {
   const received = deferred();
   let cancelled = false;
-  const downloader = new ModelDownloader(fixtureModel, async () => new Response(new ReadableStream({
+  const downloader = await memoryDownloader(fixtureModel, async () => new Response(new ReadableStream({
     start(controller) { controller.enqueue(fixtureBytes.slice(0, 8)); },
     cancel() { cancelled = true; },
   })));
@@ -178,7 +185,7 @@ test('abort cancels a pending body read and discards partial data', async () => 
   const downloading = assert.rejects(downloader.download(), { code: 'cancelled' });
   await received.promise;
   await assert.rejects(downloader.download(), { code: 'busy' });
-  assert.throws(() => downloader.clear(), { code: 'busy' });
+  await assert.rejects(downloader.clear(), { code: 'busy' });
   await downloader.abort();
   await downloading;
 
@@ -188,7 +195,7 @@ test('abort cancels a pending body read and discards partial data', async () => 
 });
 
 test('abort at verification cannot publish a ready model', async () => {
-  const downloader = new ModelDownloader(fixtureModel, async () => fixtureResponse());
+  const downloader = await memoryDownloader(fixtureModel, async () => fixtureResponse());
   let aborting;
   downloader.subscribe(state => {
     if (state.phase === 'verifying') aborting = downloader.abort();
@@ -207,7 +214,7 @@ test('buffered large chunks yield to timer-driven cancellation before completion
     bytes: bytes.length,
     sha256: createHash('sha256').update(bytes).digest('hex'),
   };
-  const downloader = new ModelDownloader(largeFixture, async () => fixtureResponse(bytes));
+  const downloader = await memoryDownloader(largeFixture, async () => fixtureResponse(bytes));
   let aborting;
   downloader.subscribe(state => {
     if (state.phase === 'downloading' && state.loadedBytes === bytes.length) {
@@ -223,7 +230,7 @@ test('buffered large chunks yield to timer-driven cancellation before completion
 
 test('ready data is reused in this page only; clear permits a fresh download', async () => {
   let calls = 0;
-  const downloader = new ModelDownloader(fixtureModel, async () => {
+  const downloader = await memoryDownloader(fixtureModel, async () => {
     calls++;
     return fixtureResponse();
   });
@@ -231,7 +238,7 @@ test('ready data is reused in this page only; clear permits a fresh download', a
   const first = await downloader.download();
   assert.equal(await downloader.download(), first);
   assert.equal(calls, 1);
-  downloader.clear();
+  await downloader.clear();
   assert.equal(downloader.getModel(), undefined);
   assert.equal(downloader.getState().phase, 'idle');
   await downloader.download();
@@ -239,7 +246,7 @@ test('ready data is reused in this page only; clear permits a fresh download', a
 });
 
 test('a ready subscriber can immediately clear data without stale notifications', async () => {
-  const downloader = new ModelDownloader(fixtureModel, async () => fixtureResponse());
+  const downloader = await memoryDownloader(fixtureModel, async () => fixtureResponse());
   const phases = [];
   downloader.subscribe(state => {
     if (state.phase === 'ready') downloader.clear();
@@ -256,6 +263,8 @@ test('UI actions, error display and verification progress follow the state', () 
   for (const phase of ['idle', 'downloading', 'verifying', 'cancelling', 'cancelled', 'ready', 'error']) {
     const view = describeModelDownload({
       phase, loadedBytes: 8, totalBytes: fixtureModel.bytes,
+      storageMode: 'memory',
+      cache: { available: false, cached: false, bytes: 0, retentionDays: 7 },
       error: { code: 'network', message: '接続を確認して再試行してください。' },
     });
     assert(view.status.length > 0);
