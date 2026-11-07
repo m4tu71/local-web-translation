@@ -1,8 +1,7 @@
 # GitHub Actions と GitHub Pages
 
-状態: CI と Pages の workflow を追加。2026-11-08、PR #2 の commit `897638a` で CI が成功
-（[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この結果は当該 commit の検証であり、後続 commit は個別の実行結果を確認する。
-GitHub Pages の有効化、main 上での公開 workflow、公開先の HTTP 確認は未実施。
+状態: GitHub Pages で公開済み。2026-11-08、PR #2 の commit `897638a` で CI が成功
+（[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この結果は当該 commit の検証であり、公開に使われた workflow の実行記録とは別。
 
 ## workflow
 
@@ -19,16 +18,20 @@ GitHub Pages の公開元設定はリポジトリ側で一度必要。
 3. workflow が main に入った後、main への push または Actions 画面から `Deploy to GitHub Pages` を実行する。
 4. workflow の `github-pages` environment に表示される URL と Actions の完了状態を確認する。
 
-想定 URL は <https://m4tu71.github.io/local-web-translation/>。現時点では Pages を有効化・公開しておらず、この URL の到達性は未確認。
+公開先は <https://m4tu71.github.io/local-web-translation/>。
+
+2026-11-08、利用者から公開と実ブラウザーでの手動確認完了の報告を受領した。モデル取得、CPU・GPU それぞれのロード・翻訳・ロード解除、ブラウザーを再起動した後もモデルデータが保持されることを確認済み。環境や実行ログなどは[各検証記録](model-cache.md#手動確認の記録)に記載する。
+
+同日、エージェントは公開 URL に HTTP GET し、HTML の HTTP 200 とページタイトルを確認した。この確認は公開ページの応答確認に限り、ブラウザーでの JavaScript 実行、モデル操作、推論を検証したものではない。利用者が実施したモデル操作の確認とは区別する。公開元設定やデプロイ workflow の個別実行 ID は記録していない。
 
 Vite の `base` は `/local-web-translation/` のままにする。ユーザー名サイトや独自ドメインへ公開先を変更するときは、`vite.config.ts` の `base` とビルド検査を一緒に更新する。
 
 ## 公開後の確認
 
-自動 workflow は型検査・モックテスト・静的ビルド・artifact の中身を検査する。ブラウザー実行やモデルの取得・推論は行わない。公開後は HTTPS 上で以下を手動確認し、ブラウザー・バージョンと結果を記録する。
+自動 workflow は型検査・モックテスト・静的ビルド・artifact の中身を検査する。ブラウザー実行やモデルの取得・推論は行わない。公開後の確認状況は上記の利用者報告と HTTP 応答確認に分けて記録する。次の項目は引き続き追加確認に使う。
 
 - ルート画面、JavaScript、CSS、通常版と compat 版の WASM、第三者ライセンスが想定 URL のサブパスから HTTP 200 で取得できる。
-- モデルのライセンスと取得元リンクが開ける。モデルは明示的な操作後に Hugging Face から取得され、取得・再読み込み後の OPFS 復元・翻訳が使える。実際の GPU / WASM 経路はブラウザーで選択して確認する。
+- モデルのライセンスと取得元リンクが開ける。モデル取得とブラウザー再起動後の OPFS 保持、CPU / GPU での翻訳は利用者報告で確認済み。ネットワーク記録による再取得の有無や、実際に使用されたバックエンドの詳細は未確認。
 - Firefox 等の compat 経路を対象とする場合は同じ操作を確認する。CI は実ブラウザーの API 対応や推論成功を保証しない。
 - ブラウザー開発者ツールでエラー・404・CORS の失敗がないことを確認する。
 

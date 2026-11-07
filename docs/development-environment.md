@@ -17,7 +17,7 @@
 | 最初の開発依存 | vite 8.3.6、typescript 7.0.2、@types/node 22.20.5 |
 | 現在の実行時依存 | @wllama/wllama・@wllama/wllama-compat 3.12.0（保存済みローカル tarball） |
 | モデルのハッシュ検証 | @noble/hashes 2.4.0（ストリームで SHA-256 を計算） |
-| 公開先の方針 | GitHub Pages へ dist/ を公開。Actions workflow は追加済み、Pages 設定と初回公開は未確認 |
+| 公開先の方針 | GitHub Pages へ dist/ を公開。公開済み。利用者によるモデル取得・CPU / GPU 翻訳の確認と、エージェントによる公開 URL の HTML HTTP 200 確認あり（[詳細](github-pages.md)） |
 
 Node.js / npm は現在のローカル環境でバージョンを確認済み。Vite の公式要件は
 Node.js 20.19+ または 22.12+。Node.js 22 系を使用する間も保守期限と更新を確認する。
@@ -131,8 +131,7 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
   開発サーバーだけにヘッダーを追加して公開環境でも動くとは判断しない。
 - Service Worker とオフライン対応は初期構築に含めず、推論 PoC 後に設計する。
 - GitHub Actions CI / Pages workflow を追加済み。2026-11-08、PR #2 の commit `897638a` で CI の成功を確認
-  （[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この確認は当該 commit に限る。
-  Pages の Settings → Pages で Source を GitHub Actions に設定し、main 上で公開 workflow を実行して公開後の手動ブラウザー確認を行う。
+  （[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この確認は当該 commit に限る。公開先と公開後の確認記録は[GitHub Pages 文書](github-pages.md)を参照。デプロイ workflow の個別実行 ID は記録していない。
 
 ## 環境構築後の完了条件
 
@@ -165,7 +164,7 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
   OPFS のキャッシュと保持期限を実装し、模擬 OPFS テストを追加。2026-11-08、利用者から OPFS への保存・復元・推論が動作したとの報告を受領（詳細と未確認範囲は[モデルキャッシュ文書](model-cache.md)）。
   GitHub Actions CI / Pages workflow を追加し、同日、PR #2 の commit `897638a` で CI が成功
   （[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この確認は当該 commit に限る。
-  Settings の Pages 公開元設定・main 上での公開 workflow・実公開は未確認（[手順書](github-pages.md)）。利用者の GPU / CPU 別の過去の確認結果は翻訳 PoC 文書に記録。
+  利用者が公開先でモデルを取得し、CPU / GPU のロード・翻訳・解除とブラウザー再起動後のモデル保持を確認。エージェントは公開 URL の HTML HTTP 200 のみ確認。ブラウザー・端末の詳細や追加の計測ログは記録なし（[検証記録](github-pages.md)）。
 
 ## 参照
 
