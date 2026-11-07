@@ -32,7 +32,7 @@ PLaMo 3 Translate をブラウザ内で実行する静的翻訳アプリ（開�
 | OPFS キャッシュ・期限管理 | 実装済み。模擬 OPFS のテストと、実ブラウザーでの手動確認状況は[キャッシュ文書](docs/model-cache.md)を参照 |
 | アプリ全体のオフライン利用 | 未実装。モデルの OPFS 保存だけではオフライン起動を保証しない |
 | GitHub Actions CI | PR / main 用 workflow を追加。2026-11-08、PR #2 の commit `897638a` で成功（[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この結果は当該 commit の検証で、後続 commit は各 workflow 実行で確認 |
-| GitHub Pages 公開 | main 用 workflow を追加。Settings の Source 設定と実公開は未確認 |
+| GitHub Pages 公開 | [公開済み](https://m4tu71.github.io/local-web-translation/)。利用者がモデル取得、CPU / GPU のロード・翻訳・解除、ブラウザー再起動後のモデル保持を手動確認。エージェントは公開 URL の HTML HTTP 200 のみ確認 |
 
 準備ブランチでは開発環境・成果物・文書を整備しました。
 依存導入・復元確認とアセットの読み込み設定を終え、feat/inference-poc ブランチで
@@ -63,7 +63,7 @@ npm run preview
 本番ビルドのプレビューは http://localhost:4173/local-web-translation/ です。
 dist/ が配信対象です。モデル重みは含めません。
 
-GitHub Pages の有効化と公開後の手動確認は[手順書](docs/github-pages.md)を参照してください。
+GitHub Pages の公開と確認範囲は[手順書](docs/github-pages.md)を参照してください。
 
 ## ライセンス
 
