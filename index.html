@@ -15,7 +15,16 @@
         <h2 id="model-heading">翻訳モデルの取得</h2>
         <p id="model-name">PLaMo 3 Translate 0.8B · Q4_K_M</p>
         <p>約573 MBを Hugging Face から取得します。取得はボタンを押すと始まります。</p>
-        <p class="storage-note">モデルは開いているページのメモリに保持します。再読み込みやページを閉じると失われます。</p>
+        <label for="model-storage-mode">モデルの保存先</label>
+        <select id="model-storage-mode" aria-describedby="model-storage-note" disabled>
+          <option value="opfs">このブラウザーに保存（推奨）</option>
+          <option value="memory">このページのメモリだけに保存</option>
+        </select>
+        <p id="model-storage-note" class="storage-note">ブラウザー保存はこのサイト専用領域を使います。サイトのデータ消去やブラウザーの空き容量確保で削除される場合があります。</p>
+        <p id="model-cache-status" class="storage-note" role="status" aria-live="polite" aria-atomic="true">ブラウザー内のモデルキャッシュを確認しています。</p>
+        <label for="model-retention">保存データの保持期間</label>
+        <input id="model-retention" type="number" min="1" max="30" step="1" value="7" aria-describedby="model-retention-note" disabled />
+        <p id="model-retention-note" class="storage-note">最後にモデルを保存・ロード・翻訳した日から数えます。ページを開いただけでは延長されません。</p>
         <p class="storage-note">処理中は削除できません。ロードを開始した後に削除する場合は、先に下の画面でロードを解除してください。</p>
         <p>
           <a id="model-source" href="https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/tree/dbeb0856cb0b004b484f190bb71dd65876297013">モデルの配信元</a>
@@ -31,7 +40,7 @@
         <div class="model-actions">
           <button id="model-download" type="button" disabled>モデルを取得</button>
           <button id="model-cancel" type="button" disabled>中止</button>
-          <button id="model-clear" type="button" disabled>メモリから削除</button>
+          <button id="model-clear" type="button" disabled>保存データを削除</button>
         </div>
       </section>
       <section class="model-panel" aria-labelledby="poc-heading">

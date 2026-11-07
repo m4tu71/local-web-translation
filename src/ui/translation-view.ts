@@ -31,6 +31,9 @@ export function describeTranslation(state: TranslationSessionState, text: string
   if (stopping) {
     status = '中止しています。処理の終了とリソース解放を待ちます。';
   }
+  if (state.cancelling) {
+    status = '中止しています。モデルの確認とリソース解放を待ちます。';
+  }
   if (state.error) {
     status = '処理に失敗しました。エラーと検証ログを確認してください。';
   }
@@ -40,7 +43,7 @@ export function describeTranslation(state: TranslationSessionState, text: string
     busy,
     canLoad: !busy && state.hasModelFile && !state.engine.modelLoaded,
     canTranslate: !busy && state.engine.phase === 'ready' && Boolean(text.trim()),
-    canAbort: !stopping && ['loading', 'translating'].includes(state.engine.phase),
+    canAbort: !stopping && !state.cancelling && ['loading', 'translating'].includes(state.operation),
     canUnload: !busy && state.modelInUse,
     canChangeBackend: !busy && !state.modelInUse,
   };

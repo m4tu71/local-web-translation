@@ -2,7 +2,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { modelDownloadUrl, type ModelDefinition } from './plamo.ts';
 
-export type DownloadErrorCode = 'http' | 'network' | 'integrity' | 'unsupported' | 'cancelled' | 'busy';
+export type DownloadErrorCode = 'http' | 'network' | 'integrity' | 'unsupported' | 'cancelled' | 'busy' | 'not-ready';
 
 export class ModelDownloadError extends Error {
   readonly code: DownloadErrorCode;
@@ -25,6 +25,35 @@ interface DownloadOptions {
   fetcher?: typeof fetch;
 }
 
+export async function openModelResponse(
+  model: ModelDefinition,
+  signal: AbortSignal,
+  fetcher: typeof fetch = globalThis.fetch,
+): Promise<Response> {
+  signal.throwIfAborted();
+  if (typeof fetcher !== 'function') {
+    throw new ModelDownloadError('unsupported', 'このブラウザではモデルを取得できません。対応する新しいブラウザで開いてください。');
+  }
+  const response = await fetcher(modelDownloadUrl(model), {
+    signal,
+    mode: 'cors',
+    credentials: 'omit',
+    cache: 'no-store',
+    referrerPolicy: 'no-referrer',
+  });
+  if (response.status !== 200) {
+    void response.body?.cancel().catch(() => {});
+    throw new ModelDownloadError(
+      'http',
+      `モデルを取得できませんでした（HTTP ${response.status}）。配信元の公開状態と接続を確認して、再試行してください。`,
+    );
+  }
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    throw new ModelDownloadError('unsupported', 'このブラウザでは受信の進捗を読み取れません。対応する新しいブラウザで開いてください。');
+  }
+  return response;
+}
+
 /** Fetches one complete, pinned file; partial or unverified data is never returned. */
 export async function downloadModel(
   model: ModelDefinition,
@@ -38,27 +67,11 @@ export async function downloadModel(
     throw new ModelDownloadError('unsupported', 'このブラウザではモデルを取得できません。対応する新しいブラウザで開いてください。');
   }
 
-  const response = await fetcher(modelDownloadUrl(model), {
-    signal,
-    mode: 'cors',
-    credentials: 'omit',
-    cache: 'no-store',
-    referrerPolicy: 'no-referrer',
-  });
+  const response = await openModelResponse(model, signal, fetcher);
 
-  if (response.status !== 200) {
-    void response.body?.cancel().catch(() => {});
-    throw new ModelDownloadError(
-      'http',
-      `モデルを取得できませんでした（HTTP ${response.status}）。配信元の公開状態と接続を確認して、再試行してください。`,
-    );
-  }
-
-  if (!response.body || typeof response.body.getReader !== 'function') {
-    throw new ModelDownloadError('unsupported', 'このブラウザでは受信の進捗を読み取れません。対応する新しいブラウザで開いてください。');
-  }
-
-  const reader = response.body.getReader();
+  const body = response.body;
+  if (!body) throw new ModelDownloadError('unsupported', '受信ストリームを利用できません。');
+  const reader = body.getReader();
   const hash = sha256.create();
   const chunks: Uint8Array<ArrayBuffer>[] = [];
   let loadedBytes = 0;
