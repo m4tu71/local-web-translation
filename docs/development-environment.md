@@ -3,6 +3,7 @@
 状態: 開発環境を構築済み。依存関係の復元・型検査・ビルド・HTTP 配信を確認済み。
 利用者がモデルの取得・メモリからの削除・実モデルのロードと1文翻訳をブラウザで手動確認済み。
 利用者が GPU / CPU（WASM）の両経路を確認し、処理時間とログを提供。ブラウザ・端末の詳細は未記録。
+通常翻訳画面の日英切り替え・入力・結果表示の操作要件は[設計書](translation-ui.md)に記載しています。今回の画面を使ったレイアウト、キーボード、クリップボード、実モデルの一連操作のブラウザー確認は未実施です。旧画面の実モデル確認と区別してください（[記録](translation-poc.md)）。
 
 ## 採用構成
 
@@ -99,7 +100,8 @@ src/styles/                      # CSS
 src/inference/                    # UI 非依存 API、PFML3、wllama アダプター
 src/models/                       # 固定モデルの取得・検証・保存方法の選択
 src/storage/                      # OPFS キャッシュと保持期限
-src/ui/                           # モデル取得の DOM 操作と表示状態
+src/translation/                  # 入力検証、日英の翻訳方向
+src/ui/                           # 翻訳画面・モデル取得の DOM 操作と表示状態
 src/poc/                          # 手動翻訳検証の操作フローとログ
 tests/                            # 推論 API / wllama クライアントのモックテスト
 public/THIRD_PARTY_NOTICES.txt    # 配信に含めるライセンス表示
@@ -118,7 +120,9 @@ WASM はインストール済み依存から Vite で解決し、Worker コー�
 モデル重みは public/、src/、dist/、Git 管理対象のいずれにも置かず、
 Hugging Face からブラウザが直接取得して OPFS に保存する。
 
-## 推論 PoC に向けた保留事項
+## 翻訳ワークスペースと継続確認
+
+通常の翻訳画面の設計・操作・回復要件は[翻訳画面設計書](translation-ui.md)を参照してください。UI の状態遷移や入力操作はモデル・推論エンジンをモックした自動テストで確認し、ブラウザー表示や実モデルの性能を自動テストの結果から推定しません。
 
 エンジン導入時は [推論エンジンの導入・切り替え方針](inference-engine-integration.md) に従う。
 自前ビルドと公式 npm 版を同じパッケージ名で扱い、アダプターとアセット解決を分離する。
@@ -129,7 +133,7 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 - WASM / Worker は依存から取り込み済み。WebGPU と WASM スレッド数はモデル操作の実装時に定義する。
 - マルチスレッド WASM が要求するクロスオリジン分離は、GitHub Pages での成立条件も検証する。
   開発サーバーだけにヘッダーを追加して公開環境でも動くとは判断しない。
-- Service Worker とオフライン対応は初期構築に含めず、推論 PoC 後に設計する。
+- Service Worker は未導入。OPFS にモデルを保存しても、アプリ資材の取得やオフライン起動を保証しない。アプリ全体のオフライン対応は別途設計・検証する。
 - GitHub Actions CI / Pages workflow を追加済み。2026-11-08、PR #2 の commit `897638a` で CI の成功を確認
   （[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この確認は当該 commit に限る。公開先と公開後の確認記録は[GitHub Pages 文書](github-pages.md)を参照。デプロイ workflow の個別実行 ID は記録していない。
 
