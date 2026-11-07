@@ -1,27 +1,37 @@
 import type { ModelDownloadState } from '../models/model-download.ts';
 
+const ACTIVE_PHASES = new Set([
+  'checking',
+  'downloading',
+  'verifying',
+  'cancelling',
+  'clearing',
+  'updating-retention',
+]);
+
 export function describeModelDownload(state: ModelDownloadState) {
-  const active = ['checking', 'downloading', 'verifying', 'cancelling', 'clearing', 'updating-retention'].includes(state.phase);
+  const active = ACTIVE_PHASES.has(state.phase);
   const messages = {
-    idle: '取得前です。「モデルを取得」を押してください。',
-    checking: 'ブラウザー内のモデルキャッシュを確認しています。',
-    downloading: 'Hugging Face からモデルを取得しています。',
-    verifying: '受信が終わりました。モデルの整合性を確認しています。',
-    cancelling: '取得を中止しています。',
-    clearing: '保存データを削除しています。',
-    'updating-retention': '保持期間を更新しています。',
-    cancelled: '取得を中止しました。再試行すると最初から取得します。',
-    ready: 'モデルを使用できます。下の画面でロードしてください。',
-    error: 'モデルを取得できませんでした。エラーの内容を確認してください。',
+    idle: 'モデルはまだ保存されていません。取得するにはボタンを押してください。',
+    checking: 'ブラウザー内のモデル保存状態を確認しています。',
+    downloading: 'モデルを取得しています。受信には時間がかかる場合があります。',
+    verifying: '取得したモデルの整合性を確認しています。',
+    cancelling: '取得を中止しています。途中データを整理しています。',
+    clearing: '保存モデルを削除しています。',
+    'updating-retention': 'モデルの保持期間を更新しています。',
+    cancelled: '取得を中止しました。再取得すると最初から始まります。',
+    ready: 'モデルを取得しました。翻訳するにはロードしてください。',
+    error: 'モデルを取得できませんでした。内容を確認して再試行してください。',
   };
 
   return {
     status: messages[state.phase],
     active,
+    showProgress: ['downloading', 'verifying', 'cancelling'].includes(state.phase),
     canStart: !active && state.phase !== 'ready',
     canAbort: state.phase === 'downloading' || state.phase === 'verifying',
     canClear: !active && (state.cache.cached || state.phase === 'ready'),
-    indeterminate: state.phase === 'verifying' || state.phase === 'cancelling',
-    error: state.phase === 'error' ? state.error?.message ?? '' : '',
+    indeterminate: ['checking', 'verifying', 'cancelling'].includes(state.phase),
+    error: state.phase === 'error' ? state.error?.message ?? 'モデルを準備できませんでした。' : '',
   };
 }

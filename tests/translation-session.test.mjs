@@ -57,7 +57,7 @@ test('PoC waits for a downloaded model and never initializes inference automatic
   assert.equal(describeTranslation(session.getState(), '日本語').canLoad, true);
 });
 
-test('PoC passes the existing Blob to load and fixes translation direction to Japanese-English', async () => {
+test('passes the existing Blob to load and translates Japanese to English by default', async () => {
   const { session, blob, calls } = fixture();
   await session.load('cpu');
   assert.equal(calls.loads[0][0][0], blob);
@@ -72,10 +72,80 @@ test('PoC passes the existing Blob to load and fixes translation direction to Ja
   assert.equal(session.getState().result.text, 'The meeting has been moved to next Monday.');
   assert.equal(session.getState().result.elapsedMs, 10);
   assert.equal(session.getState().result.truncated, false);
+  assert.deepEqual(session.getState().result.direction, {
+    sourceLanguage: 'ja',
+    targetLanguage: 'en',
+  });
 
   session.clearResult();
   assert.equal(session.getState().result, undefined);
   await session.unload();
+});
+
+test('translates English to Japanese explicitly without reloading the model', async () => {
+  const { session, calls } = fixture();
+  await session.load('auto');
+  await session.translate('The meeting starts at nine.', {
+    sourceLanguage: 'en',
+    targetLanguage: 'ja',
+  });
+
+  const [prompt, options] = calls.completions[0];
+  assert(prompt.includes('input<|plamo:key|>lang<|plamo:val|>en<|plamo:msg|>'));
+  assert(prompt.endsWith('output<|plamo:key|>lang<|plamo:val|>ja<|plamo:msg|>'));
+  assert.equal(options.maxTokens, 512);
+  assert.equal(calls.loads.length, 1);
+  assert.equal(calls.factories, 1);
+  assert.deepEqual(session.getState().result.direction, {
+    sourceLanguage: 'en',
+    targetLanguage: 'ja',
+  });
+
+  await session.unload();
+});
+
+test('captures a stable direction before asynchronous inference starts', async () => {
+  const entered = deferred();
+  const completion = deferred();
+  const { session, calls } = fixture({
+    complete(prompt) {
+      entered.resolve(prompt);
+      return completion.promise;
+    },
+  });
+  await session.load('auto');
+  const direction = { sourceLanguage: 'en', targetLanguage: 'ja' };
+  const translating = session.translate('The meeting starts at nine.', direction);
+  const prompt = await entered.promise;
+  direction.sourceLanguage = 'ja';
+  direction.targetLanguage = 'en';
+  completion.resolve({ text: '会議は9時に始まります。', finishReason: 'stop' });
+  await translating;
+
+  assert(prompt.includes('input<|plamo:key|>lang<|plamo:val|>en<|plamo:msg|>'));
+  assert(prompt.endsWith('output<|plamo:key|>lang<|plamo:val|>ja<|plamo:msg|>'));
+  assert.deepEqual(session.getState().result.direction, {
+    sourceLanguage: 'en',
+    targetLanguage: 'ja',
+  });
+  assert(Object.isFrozen(session.getState().result.direction));
+  assert.equal(calls.completions.length, 0);
+
+  await session.unload();
+});
+
+test('load and unload preserve an existing translation result', async () => {
+  const { session } = fixture();
+  await session.load('auto');
+  await session.translate('会議は来週の月曜日に変更されました。');
+  const result = session.getState().result;
+
+  await session.unload();
+  assert.equal(session.getState().result, result);
+  await session.load('cpu');
+  assert.equal(session.getState().result, result);
+  await session.unload();
+  assert.equal(session.getState().result, result);
 });
 
 test('load/translation controls and model deletion lock follow the busy state', async () => {
@@ -172,7 +242,7 @@ test('cancelled translation exposes no stale result and can reload without re-do
   assert.equal(session.getState().error, undefined);
   assert.equal(session.getState().engine.modelLoaded, false);
   assert(source.getModel());
-  assert.match(describeTranslation(session.getState(), '日本語').status, /中止/);
+  assert.match(describeTranslation(session.getState(), '日本語').resultStatus, /中止/);
 
   await session.load('cpu');
   assert.equal(calls.factories, 2);
@@ -195,12 +265,52 @@ test('loading failure logs its cause and unlocks model deletion only after unloa
 test('input validation preserves loaded model and directs the user to fix input', async () => {
   const { session } = fixture();
   await session.load('auto');
-  await assert.rejects(session.translate('<|plamo:tag|>'), { code: 'invalid-input' });
+  const invalidInputs = [
+    '',
+    ' '.repeat(3),
+    'a'.repeat(501),
+    '<|plamo:tag|>',
+  ];
+  for (const text of invalidInputs) {
+    await assert.rejects(session.translate(text), { code: 'invalid-input' });
+    assert.equal(session.getState().engine.modelLoaded, true);
+    assert.match(session.getState().error, /入力を修正/);
+  }
+  await assert.rejects(session.translate('同じ言語', {
+    sourceLanguage: 'ja',
+    targetLanguage: 'ja',
+  }), { code: 'invalid-input' });
   assert.equal(session.getState().engine.modelLoaded, true);
-  assert.match(session.getState().error, /入力を修正/);
-  session.clearResult();
+  assert.equal(session.getState().operation, 'idle');
   await session.translate('こんにちは');
   assert.equal(session.getState().error, undefined);
+  await session.unload();
+});
+
+test('abort waits for cache-touch work and does not publish a stale translation result', async () => {
+  const entered = deferred();
+  const cacheTouch = deferred();
+  const { session, source } = fixture();
+  await session.load('auto');
+  source.markUsed = () => {
+    entered.resolve();
+    return cacheTouch.promise;
+  };
+
+  const translating = assert.rejects(session.translate('こんにちは'), { code: 'cancelled' });
+  await entered.promise;
+  let abortFinished = false;
+  const aborting = session.abort().then(() => { abortFinished = true; });
+  await Promise.resolve();
+  assert.equal(abortFinished, false);
+  cacheTouch.resolve();
+  await Promise.all([aborting, translating]);
+
+  assert.equal(session.getState().operation, 'idle');
+  assert.equal(session.getState().engine.modelLoaded, true);
+  assert.equal(session.getState().result, undefined);
+  assert.equal(session.getState().error, undefined);
+  assert.match(session.getState().notice, /もう一度翻訳できます/);
   await session.unload();
 });
 
@@ -228,7 +338,7 @@ test('truncated and empty output remain distinguishable and logs have a fixed bo
     await session.translate('ユーザーの入力');
   }
   assert.equal(session.getState().result.truncated, true);
-  assert.match(describeTranslation(session.getState(), '日本語').status, /空/);
+  assert.match(describeTranslation(session.getState(), '日本語').resultStatus, /空/);
   assert.equal(session.getState().logs.length, 100);
   assert(!session.getState().logs.some(line => line.includes('ユーザーの入力')));
   assert(Object.isFrozen(session.getState()));

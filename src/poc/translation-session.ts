@@ -1,5 +1,6 @@
 import { InferenceError } from '../inference/types.ts';
 import type { InferenceEngine, InferenceState, ModelLoadOptions, TranslationResult } from '../inference/types.ts';
+import { validateTranslationInput, type TranslationDirection } from '../translation/input.ts';
 
 interface ModelSource {
   getModel(): Blob | undefined;
@@ -12,6 +13,7 @@ export type PocOperation = 'idle' | 'loading' | 'translating' | 'unloading';
 
 export interface PocResult extends TranslationResult {
   readonly elapsedMs: number;
+  readonly direction: TranslationDirection;
 }
 
 export interface TranslationSessionState {
@@ -51,7 +53,6 @@ export class TranslationSession {
   private releaseModelLease?: () => Promise<void>;
   private operationController?: AbortController;
   private operationCompletion?: Promise<void>;
-  private resolveOperationCompletion?: () => void;
   private listeners = new Set<(state: TranslationSessionState) => void>();
   private readonly modelSource: ModelSource;
   private readonly createEngine: () => InferenceEngine;
@@ -102,12 +103,11 @@ export class TranslationSession {
     const started = this.now();
     const controller = new AbortController();
     this.operationController = controller;
-    this.operationCompletion = new Promise<void>(resolve => { this.resolveOperationCompletion = resolve; });
+    const finishOperation = this.beginOperationCompletion();
     this.update({
       operation: 'loading',
       modelInUse: true,
       requestedBackend: backend,
-      result: undefined,
       notice: undefined,
       error: undefined,
     });
@@ -118,7 +118,7 @@ export class TranslationSession {
       await this.releaseEngine();
       const lease = await this.modelSource.acquireModel?.(controller.signal);
       this.releaseModelLease = lease?.release;
-      controller.signal.throwIfAborted();
+      this.throwIfOperationCancelled(controller);
       const model = lease?.model ?? this.modelSource.getModel();
       if (!model) throw new Error('モデルを読み取れません。もう一度取得してください。');
       this.engine = this.createEngine();
@@ -129,25 +129,31 @@ export class TranslationSession {
         this.update({ engine });
       });
       await this.engine.loadModel([model], { backend, contextSize: 2048, threads: 1 });
+      this.throwIfOperationCancelled(controller);
       await this.touchModelCache();
+      this.throwIfOperationCancelled(controller);
       this.log(`ロード完了: ${this.elapsed(started)} ms`);
     } catch (error) {
       this.reportError(error);
       throw error;
     } finally {
-      if (!this.engine && this.releaseModelLease) {
-        await this.releaseModelLease();
-        this.releaseModelLease = undefined;
+      try {
+        if (!this.engine && this.releaseModelLease) {
+          await this.releaseModelLease();
+          this.releaseModelLease = undefined;
+        }
+      } finally {
+        this.operationController = undefined;
+        this.update({ operation: 'idle', cancelling: false, modelInUse: Boolean(this.engine || this.releaseModelLease) });
+        finishOperation();
       }
-      this.operationController = undefined;
-      this.update({ operation: 'idle', cancelling: false, modelInUse: Boolean(this.engine) });
-      this.resolveOperationCompletion?.();
-      this.resolveOperationCompletion = undefined;
-      this.operationCompletion = undefined;
     }
   }
 
-  async translate(text: string): Promise<void> {
+  async translate(
+    text: string,
+    direction: TranslationDirection = { sourceLanguage: 'ja', targetLanguage: 'en' },
+  ): Promise<void> {
     this.assertIdle();
     if (!this.engine || !this.state.engine.modelLoaded) {
       throw new Error('先にモデルをロードしてください。');
@@ -155,20 +161,30 @@ export class TranslationSession {
 
     const engine = this.engine;
     const started = this.now();
-    this.operationController = new AbortController();
+    const controller = new AbortController();
+    this.operationController = controller;
+    const finishOperation = this.beginOperationCompletion();
     this.update({ operation: 'translating', result: undefined, notice: undefined, error: undefined });
-    this.log('翻訳開始: ja → en, maxTokens=512');
 
     try {
+      validateTranslationInput(text, direction);
+      const resultDirection = Object.freeze({
+        sourceLanguage: direction.sourceLanguage,
+        targetLanguage: direction.targetLanguage,
+      });
+      this.log(`翻訳開始: ${resultDirection.sourceLanguage} → ${resultDirection.targetLanguage}, maxTokens=512`);
+      this.throwIfOperationCancelled(controller);
       const result = await engine.translate({
         text,
-        sourceLanguage: 'ja',
-        targetLanguage: 'en',
+        sourceLanguage: resultDirection.sourceLanguage,
+        targetLanguage: resultDirection.targetLanguage,
         maxTokens: 512,
       });
+      this.throwIfOperationCancelled(controller);
       const elapsedMs = this.elapsed(started);
-      this.update({ result: Object.freeze({ ...result, elapsedMs }) });
       await this.touchModelCache();
+      this.throwIfOperationCancelled(controller);
+      this.update({ result: Object.freeze({ ...result, elapsedMs, direction: resultDirection }) });
       this.log(`翻訳終了: ${elapsedMs} ms, truncated=${result.truncated}`);
     } catch (error) {
       this.reportError(error);
@@ -176,6 +192,7 @@ export class TranslationSession {
     } finally {
       this.operationController = undefined;
       this.update({ operation: 'idle', cancelling: false });
+      finishOperation();
     }
   }
 
@@ -202,7 +219,7 @@ export class TranslationSession {
 
   async unload(): Promise<void> {
     this.assertIdle();
-    this.update({ operation: 'unloading', result: undefined, notice: undefined, error: undefined });
+    this.update({ operation: 'unloading', notice: undefined, error: undefined });
     this.log('ロード解除開始');
 
     try {
@@ -247,6 +264,27 @@ export class TranslationSession {
     }
   }
 
+  private beginOperationCompletion(): () => void {
+    let resolve!: () => void;
+    const completion = new Promise<void>(resolveCompletion => {
+      resolve = resolveCompletion;
+    });
+    this.operationCompletion = completion;
+
+    return () => {
+      resolve();
+      if (this.operationCompletion === completion) {
+        this.operationCompletion = undefined;
+      }
+    };
+  }
+
+  private throwIfOperationCancelled(controller: AbortController): void {
+    if (controller.signal.aborted) {
+      throw new InferenceError('cancelled', '操作を中止しました。', controller.signal.reason);
+    }
+  }
+
   private assertIdle(): void {
     if (this.state.operation !== 'idle') {
       throw new Error('実行中の操作が終わるまで待ってください。');
@@ -260,12 +298,21 @@ export class TranslationSession {
   private reportError(error: unknown): void {
     if ((error instanceof InferenceError && error.code === 'cancelled') ||
         (typeof error === 'object' && error !== null && 'code' in error && error.code === 'cancelled')) {
+      const modelReady = this.state.engine.modelLoaded;
+      const wasLoading = this.state.operation === 'loading';
       this.update({
-        result: undefined,
-        notice: '操作を中止しました。再実行するにはモデルをロードしてください。',
+        notice: modelReady
+          ? wasLoading
+            ? 'ロード処理を中止しましたが、モデルの準備は完了しています。翻訳を始められます。'
+            : '翻訳を中止しました。モデルの準備はできているため、もう一度翻訳できます。'
+          : '操作を中止しました。続けるにはモデルをロードしてください。',
         error: undefined,
       });
-      this.log('操作を中止しました。再実行するにはモデルをロードしてください。');
+      this.log(modelReady
+        ? wasLoading
+          ? 'ロード処理を中止しました。モデルはロード済みです。'
+          : '翻訳を中止しました。モデルはロード済みです。'
+        : '操作を中止しました。モデルを再ロードしてください。');
       return;
     }
 

@@ -1,7 +1,7 @@
 # UI から独立した推論 API
 
-状態: API と wllama アダプターを実装。モックによるライフサイクル検証済み。
-利用者の手動検証で GPU / CPU（WASM）の両経路のロード・1文翻訳・ロード解除が成功。
+状態: API と wllama アダプターを実装。API のライフサイクルをモックで検証。
+利用者から旧画面での GPU（auto 要求設定）/ CPU（WASM）のロード・日本語1文翻訳・ロード解除の報告を受領しています。これは通常画面の実ブラウザー確認ではありません。通常画面の操作・状態要件は[翻訳画面設計書](translation-ui.md)を参照してください。
 
 ## 使用する API
 
@@ -14,15 +14,18 @@ UI は src/inference/index.ts の createInferenceEngine またはページ共通
 | getState() | 現在の変更不可な状態を取得 |
 | subscribe(listener) | 現在の状態を即座に通知し、以後の変化を購読。解除関数を返す |
 | loadModel(files, options) | 取得済み GGUF の Blob / File 配列からロード |
-| translate(request) | 日本語または英語の入力を PFML3 で翻訳。text と truncated を返す |
+| translate(request) | ja / en の翻訳要求を PFML3 で処理し、text と truncated を返す |
 | abort() | 実行中の操作を中止し、モデルの解放完了まで待つ |
 | dispose() | 実行中の操作の終了・リソース解放を待ち、エンジンを使用終了にする |
 
 入力ファイルのダウンロード、revision / ハッシュ検証、OPFS 保存と保持期限は呼び出し元の責務。
 この API はネットワークへ翻訳テキストを送らず、モデルも自動取得しない。
 固定モデルの取得と画面表示は別の [ModelDownloader](model-download.md) が担当する。
-取得後の Blob を loadModel([blob]) へ渡す [手動検証画面](translation-poc.md) を実装済み。
-UI は TranslationSession 経由で API を呼び、利用者の環境でロード・1文翻訳を確認済み。
+取得後の Blob を loadModel([blob]) へ渡す UI は [TranslationSession](../src/poc/translation-session.ts) 経由で API を呼びます。過去の実モデル確認は[旧画面の検証記録](translation-poc.md)に限定して記録しています。
+
+通常画面から使う `TranslationSession.translate(text, direction)` は日本語 ↔ 英語の方向を受け取り、省略時は日本語 → 英語です。画面と TranslationSession は入力を最大 500 UTF-16 コード単位に制限し、空入力、同じ翻訳元・翻訳先、未対応言語、予約文字列を生成開始前に拒否します。方向は翻訳開始時に固定され、完了結果に `direction` として保持されます。低水準の `InferenceEngine.translate(request)` の要求型は画面上の 500 文字制限を表すものではありません。
+
+入力文・翻訳方向が変わると画面は前の結果を無効にします。ロード解除では、入力文とそのまま有効な翻訳結果を保持します。モデル取得、ロード、翻訳はそれぞれ明示的な操作で開始し、自動取得・自動推論は行いません。
 
 ```typescript
 import { createInferenceEngine, InferenceError } from './inference/index';
@@ -42,6 +45,7 @@ async function translateExample(modelFiles: readonly Blob[]): Promise<void> {
 
     const result = await engine.translate({
       text: '会議は来週の月曜日に変更されました。',
+      sourceLanguage: 'ja',
       targetLanguage: 'en',
       maxTokens: 512,
     });
@@ -109,7 +113,8 @@ PFML3 は raw completion に渡し、チャットテンプレートや assistant
 
 日本語→英語・英語→日本語のプロンプト、原文の空白保持、予約トークン拒否、BOS 非重複、
 生成パラメータ、メタデータ不一致時の失敗と解放をモックで確認する。
-利用者の環境で両経路のロードから翻訳まで成功し、ログで truncated=false を確認。
+利用者の環境で旧画面の両経路のロードから日本語→英語1文翻訳まで成功し、ログで truncated=false を確認。
+英語→日本語はプロンプトのモック確認であり、実モデルによる翻訳確認ではない。
 ロード時の検査の個別ログや生成の停止理由は未記録であり、各停止条件の独立した検証は未実施。
 
 ## 状態と同時実行
