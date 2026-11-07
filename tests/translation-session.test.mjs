@@ -242,7 +242,7 @@ test('cancelled translation exposes no stale result and can reload without re-do
   assert.equal(session.getState().error, undefined);
   assert.equal(session.getState().engine.modelLoaded, false);
   assert(source.getModel());
-  assert.match(describeTranslation(session.getState(), '日本語').status, /中止/);
+  assert.match(describeTranslation(session.getState(), '日本語').resultStatus, /中止/);
 
   await session.load('cpu');
   assert.equal(calls.factories, 2);
@@ -338,7 +338,7 @@ test('truncated and empty output remain distinguishable and logs have a fixed bo
     await session.translate('ユーザーの入力');
   }
   assert.equal(session.getState().result.truncated, true);
-  assert.match(describeTranslation(session.getState(), '日本語').status, /空/);
+  assert.match(describeTranslation(session.getState(), '日本語').resultStatus, /空/);
   assert.equal(session.getState().logs.length, 100);
   assert(!session.getState().logs.some(line => line.includes('ユーザーの入力')));
   assert(Object.isFrozen(session.getState()));
