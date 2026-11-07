@@ -23,7 +23,11 @@ export function buildTranslationPrompt(request: TranslationRequest): string {
     supportedLanguages.includes(request.sourceLanguage);
 
   if (!validTarget || !validSource) {
-    throw new InferenceError('invalid-input', 'この PoC の対応言語は ja と en です。');
+    throw new InferenceError('invalid-input', '対応言語は日本語と英語です。');
+  }
+
+  if (request.sourceLanguage !== undefined && request.sourceLanguage === request.targetLanguage) {
+    throw new InferenceError('invalid-input', '翻訳元と翻訳先に異なる言語を指定してください。');
   }
 
   let sourceLanguageAttribute = '';
