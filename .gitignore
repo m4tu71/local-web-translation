@@ -155,3 +155,7 @@ dist
 
 # Local agent research and work logs
 .ai/
+
+
+
+.codex/
