@@ -1,6 +1,8 @@
 # GitHub Actions と GitHub Pages
 
-状態: CI と Pages の workflow を追加。ドラフト PR 上の workflow 実行・GitHub Pages の有効化・公開先の HTTP 確認は未実施。
+状態: CI と Pages の workflow を追加。2026-11-08、PR #2 の commit `897638a` で CI が成功
+（[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この結果は当該 commit の検証であり、後続 commit は個別の実行結果を確認する。
+GitHub Pages の有効化、main 上での公開 workflow、公開先の HTTP 確認は未実施。
 
 ## workflow
 

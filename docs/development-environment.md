@@ -11,7 +11,7 @@
 | UI | 標準 HTML、Vanilla CSS、Vanilla TypeScript |
 | フレームワーク | React / Vue などは使用しない |
 | ビルドツール | Vite 8.3.6（vanilla-ts 相当の構成） |
-| Node.js | 初期基準は 22.23.4。ローカルと将来の CI で同一バージョンを使用 |
+| Node.js | 22.23.4。ローカルと CI で同一バージョンを使用 |
 | パッケージ管理 | npm。基準は 10.9.10 |
 | モジュール | ES Modules（package.json の type: module） |
 | 最初の開発依存 | vite 8.3.6、typescript 7.0.2、@types/node 22.20.5 |
@@ -130,8 +130,9 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 - マルチスレッド WASM が要求するクロスオリジン分離は、GitHub Pages での成立条件も検証する。
   開発サーバーだけにヘッダーを追加して公開環境でも動くとは判断しない。
 - Service Worker とオフライン対応は初期構築に含めず、推論 PoC 後に設計する。
-- GitHub Actions CI / Pages workflow を追加済み。
-  Pages の Settings → Pages で Source を GitHub Actions に設定し、main 上の初回実行と手動ブラウザー確認を行う。
+- GitHub Actions CI / Pages workflow を追加済み。2026-11-08、PR #2 の commit `897638a` で CI の成功を確認
+  （[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この確認は当該 commit に限る。
+  Pages の Settings → Pages で Source を GitHub Actions に設定し、main 上で公開 workflow を実行して公開後の手動ブラウザー確認を行う。
 
 ## 環境構築後の完了条件
 
@@ -161,7 +162,10 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
   固定モデルの取得・検証・進捗・エラー表示は実装し、小さな模擬データで検証済み。
   利用者が実モデルの取得・メモリからの削除を手動確認済み（詳細はモデル取得文書に記録）。
   ロード・日英翻訳・中止・ロード解除の PoC 画面は実装し、模擬エンジンで検証済み。
-  OPFS のキャッシュと保持期限を実装し、模擬 OPFS テストを追加。2026-11-08、利用者から OPFS への保存・復元・推論が動作したとの報告を受領（詳細と未確認範囲は[モデルキャッシュ文書](model-cache.md)）。GitHub Actions CI / Pages workflow を追加。Settings の Pages 公開元設定・workflow の初回実行・実公開は未確認（[手順書](github-pages.md)）。利用者の GPU / CPU 別の過去の確認結果は翻訳 PoC 文書に記録。
+  OPFS のキャッシュと保持期限を実装し、模擬 OPFS テストを追加。2026-11-08、利用者から OPFS への保存・復元・推論が動作したとの報告を受領（詳細と未確認範囲は[モデルキャッシュ文書](model-cache.md)）。
+  GitHub Actions CI / Pages workflow を追加し、同日、PR #2 の commit `897638a` で CI が成功
+  （[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この確認は当該 commit に限る。
+  Settings の Pages 公開元設定・main 上での公開 workflow・実公開は未確認（[手順書](github-pages.md)）。利用者の GPU / CPU 別の過去の確認結果は翻訳 PoC 文書に記録。
 
 ## 参照
 
