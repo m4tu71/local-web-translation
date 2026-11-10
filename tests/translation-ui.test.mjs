@@ -227,7 +227,7 @@ test('partial results can be copied and resumed after releasing and preparing th
     assert.equal(document.getElementById('preparation-action').textContent, 'リソースを解放');
 
     document.getElementById('preparation-action').dispatch('click');
-    assert.equal(document.getElementById('preparation-action').textContent, '翻訳の準備');
+    assert.equal(document.getElementById('preparation-action').textContent, 'モデルをロード');
     document.getElementById('preparation-action').dispatch('click');
     assert.equal(resume.disabled, false);
 
@@ -449,7 +449,7 @@ test('mounting does not load or translate; the visible preparation action starts
     mountTranslation(session, downloadUI);
     assert.deepEqual(session.calls.loads, []);
     assert.deepEqual(session.calls.translations, []);
-    assert.equal(document.getElementById('preparation-action').textContent, '翻訳の準備');
+    assert.equal(document.getElementById('preparation-action').textContent, 'モデルをロード');
 
     document.getElementById('preparation-action').dispatch('click');
     assert.deepEqual(session.calls.loads, ['auto']);
@@ -654,7 +654,7 @@ test('an unloaded model keeps the completed output visible and offers preparatio
     mountTranslation(session, downloadUI);
     assert.equal(document.getElementById('translation-output').textContent, 'Saved result');
     assert.match(document.getElementById('preparation-status').textContent, /保存済み/);
-    assert.equal(document.getElementById('preparation-action').textContent, '翻訳の準備');
+    assert.equal(document.getElementById('preparation-action').textContent, 'モデルをロード');
     assert.match(document.getElementById('translation-status').textContent, /完了/);
   });
 });

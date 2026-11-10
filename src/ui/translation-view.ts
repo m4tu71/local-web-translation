@@ -127,7 +127,7 @@ export function describeTranslation(
     preparationActionLabel = state.error ? 'ロード解除を再試行' : 'リソースを解放';
   } else if (!busy && state.hasModelFile && !state.engine.modelLoaded && !state.modelInUse) {
     preparationAction = 'load';
-    preparationActionLabel = state.error ? 'モデルを再ロード' : '翻訳の準備';
+    preparationActionLabel = state.error ? 'モデルを再ロード' : 'モデルをロード';
   } else if (!busy && !state.hasModelFile) {
     preparationAction = 'download';
     preparationActionLabel = modelPhase === 'error'
