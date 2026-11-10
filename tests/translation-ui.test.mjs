@@ -20,7 +20,7 @@ const TRANSLATION_IDS = [
   'resume-translation', 'resume-hint', 'runtime-summary', 'requested-backend-detail',
   'runtime-backend-detail', 'runtime-webgpu-api', 'runtime-context-row', 'runtime-context-detail',
   'runtime-gpu-layers-row', 'runtime-gpu-layers-detail',
-  'translation-status', 'translation-error', 'translation-error-text', 'show-logs', 'preparation-status',
+  'translation-status', 'translation-error', 'translation-error-text', 'show-logs', 'preparation-heading', 'preparation-status',
   'preparation-hint', 'preparation-action', 'preparation-abort', 'runtime-backend', 'model-settings',
   'model-download', 'model-load', 'model-unload', 'diagnostics', 'translation-logs', 'model-logs',
 ];
@@ -60,7 +60,7 @@ function sessionState(overrides = {}) {
 function createSession(initialState = sessionState()) {
   let state = initialState;
   const listeners = new Set();
-  const calls = { loads: [], translations: [], unloads: 0, aborts: 0, clears: 0, resumes: 0 };
+  const calls = { loads: [], translations: [], unloads: 0, aborts: 0, clears: 0, resumes: 0, resumeArguments: [] };
   const notify = () => {
     for (const listener of [...listeners]) listener(state);
   };
@@ -127,8 +127,9 @@ function createSession(initialState = sessionState()) {
       });
       return Promise.resolve();
     },
-    resumeTranslation() {
+    resumeTranslation(text, direction) {
       calls.resumes++;
+      calls.resumeArguments.push({ text, direction: { ...direction } });
       update({
         operation: 'translating',
         translationProgress: { phase: 'translating', completed: 0, total: 2 },
@@ -194,6 +195,7 @@ test('streaming output appends without replacing the result node and keeps copyi
     const replacements = output.replaceChildrenCount;
     assert.equal(output.textContent, 'Hello');
     assert.equal(document.getElementById('copy-result').disabled, true);
+    assert.equal(document.getElementById('preparation-heading').textContent, '翻訳中です');
 
     session.setState({ result: { ...session.getState().result, text: 'Hello world' } });
 
@@ -206,6 +208,7 @@ test('streaming output appends without replacing the result node and keeps copyi
 
 test('partial results can be copied and resumed after releasing and preparing the model', async () => {
   const document = createFakeDocument(TRANSLATION_IDS);
+  document.getElementById('translation-input').value = 'Partial source text';
   const session = createSession(sessionState({
     engine: { phase: 'idle', modelLoaded: false },
     modelInUse: true,
@@ -224,15 +227,20 @@ test('partial results can be copied and resumed after releasing and preparing th
     assert.equal(copy.textContent, '部分結果をコピー');
     assert.equal(resume.hidden, false);
     assert.equal(resume.disabled, true);
+    assert.equal(document.getElementById('preparation-heading').textContent, 'モデルのロード解除が必要です');
     assert.equal(document.getElementById('preparation-action').textContent, 'リソースを解放');
 
     document.getElementById('preparation-action').dispatch('click');
+    assert.equal(document.getElementById('preparation-heading').textContent, 'モデルのロードが必要です');
     assert.equal(document.getElementById('preparation-action').textContent, 'モデルをロード');
     document.getElementById('preparation-action').dispatch('click');
+    assert.equal(document.getElementById('preparation-heading').textContent, '翻訳できます');
     assert.equal(resume.disabled, false);
 
     resume.dispatch('click');
     assert.equal(session.calls.resumes, 1);
+    assert.deepEqual(session.calls.resumeArguments, [{ text: 'Partial source text', direction: DEFAULT_DIRECTION }]);
+    assert.equal(document.getElementById('preparation-heading').textContent, '翻訳中です');
     assert.equal(document.activeElement, document.getElementById('translation-status'));
     assert.equal(resume.hidden, true);
     assert.equal(copy.disabled, true);
@@ -304,6 +312,7 @@ test('long input accepts up to 10,000 UTF-16 code units and rejects more', async
     input.dispatch('input');
     assert.equal(document.getElementById('input-count').textContent, '10001 / 10000');
     assert.equal(translate.disabled, true);
+    assert.equal(document.getElementById('preparation-heading').textContent, '入力を確認してください');
   });
 });
 
@@ -449,11 +458,67 @@ test('mounting does not load or translate; the visible preparation action starts
     mountTranslation(session, downloadUI);
     assert.deepEqual(session.calls.loads, []);
     assert.deepEqual(session.calls.translations, []);
+    assert.equal(document.getElementById('preparation-heading').textContent, 'モデルのロードが必要です');
     assert.equal(document.getElementById('preparation-action').textContent, 'モデルをロード');
 
     document.getElementById('preparation-action').dispatch('click');
     assert.deepEqual(session.calls.loads, ['auto']);
+    assert.equal(document.getElementById('preparation-heading').textContent, '文章の入力待ち');
     assert.equal(document.activeElement, document.getElementById('preparation-status'));
+  });
+});
+
+test('a missing model is reported as a download requirement', async () => {
+  const document = createFakeDocument(TRANSLATION_IDS);
+  const session = createSession(sessionState({
+    engine: { phase: 'idle', modelLoaded: false },
+    hasModelFile: false,
+    modelInUse: false,
+  }));
+  const downloadUI = createDownloadUI(modelState({
+    phase: 'idle',
+    cache: { available: true, cached: false, bytes: 0, retentionDays: 7 },
+  }));
+
+  await withFakeDom(document, async () => {
+    mountTranslation(session, downloadUI);
+
+    assert.equal(document.getElementById('preparation-heading').textContent, 'モデルの取得が必要です');
+    assert.equal(document.getElementById('preparation-action').textContent, 'モデルを取得');
+    assert.equal(document.getElementById('translate-button').disabled, true);
+  });
+});
+
+test('a ready model with valid input is translatable even if its saved file is unavailable', async () => {
+  const document = createFakeDocument(TRANSLATION_IDS);
+  document.getElementById('translation-input').value = 'A short sentence.';
+  const session = createSession(sessionState({ hasModelFile: false }));
+
+  await withFakeDom(document, async () => {
+    mountTranslation(session, createDownloadUI());
+
+    assert.equal(document.getElementById('preparation-heading').textContent, '翻訳できます');
+    assert.equal(document.getElementById('translate-button').disabled, false);
+    assert.equal(document.getElementById('preparation-action').hidden, true);
+    assert.match(document.getElementById('translate-hint').textContent, /Ctrl\/Cmd \+ Enter/);
+  });
+});
+
+test('a failed model load asks for recovery while keeping technical error in its existing panel', async () => {
+  const document = createFakeDocument(TRANSLATION_IDS);
+  const session = createSession(sessionState({
+    engine: { phase: 'error', modelLoaded: false },
+    modelInUse: false,
+    error: 'runtime initialization failed',
+  }));
+
+  await withFakeDom(document, async () => {
+    mountTranslation(session, createDownloadUI());
+
+    assert.equal(document.getElementById('preparation-heading').textContent, 'モデルの再ロードが必要です');
+    assert.equal(document.getElementById('preparation-action').textContent, 'モデルを再ロード');
+    assert.equal(document.getElementById('preparation-status').textContent.includes('runtime initialization failed'), false);
+    assert.equal(document.getElementById('translation-error-text').textContent, 'runtime initialization failed');
   });
 });
 
@@ -551,6 +616,7 @@ test('disabled translation explains reserved input and keeps a ready model loade
     input.dispatch('input');
 
     assert.equal(document.getElementById('translate-button').disabled, true);
+    assert.equal(document.getElementById('preparation-heading').textContent, '入力を確認してください');
     assert.match(document.getElementById('translate-hint').textContent, /特殊な文字列/);
     assert.equal(session.getState().engine.modelLoaded, true);
     assert.equal(document.getElementById('preparation-action').hidden, true);
@@ -654,6 +720,7 @@ test('an unloaded model keeps the completed output visible and offers preparatio
     mountTranslation(session, downloadUI);
     assert.equal(document.getElementById('translation-output').textContent, 'Saved result');
     assert.match(document.getElementById('preparation-status').textContent, /保存済み/);
+    assert.equal(document.getElementById('preparation-heading').textContent, 'モデルのロードが必要です');
     assert.equal(document.getElementById('preparation-action').textContent, 'モデルをロード');
     assert.match(document.getElementById('translation-status').textContent, /完了/);
   });

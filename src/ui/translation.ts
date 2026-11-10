@@ -59,6 +59,7 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
   const errorText = element('translation-error-text');
   const openLogs = element<HTMLButtonElement>('show-logs');
   const preparationStatus = element('preparation-status');
+  const preparationHeading = element('preparation-heading');
   const preparationHint = element('preparation-hint');
   const preparationAction = element<HTMLButtonElement>('preparation-action');
   const preparationAbort = element<HTMLButtonElement>('preparation-abort');
@@ -184,6 +185,7 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
       preparationStatus.textContent = view.status;
       previousPreparationStatus = view.status;
     }
+    setTextIfChanged(preparationHeading, view.preparationHeading);
     preparationHint.textContent = view.preparationHint;
     preparationAction.hidden = !view.showPreparationAction;
     preparationAction.disabled = !view.showPreparationAction;

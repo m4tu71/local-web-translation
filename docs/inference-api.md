@@ -30,7 +30,7 @@ UI は src/inference/index.ts の createInferenceEngine またはページ共通
 
 `TranslationSession` は `translationProgress` の `planning` / `translating`、完了数、分割総数を状態購読者へ伝えます。部分結果は `streaming` / `partial` / `complete` と、該当する `cancelled` / `error` / `truncated` / `empty` 理由で区別します。再開可能な場合は `canResume` が true になり、`resumeTranslation(text, direction)` は現在の入力と方向を中断時の snapshot と照合した後、最後に完了していないチャンクから続けます。入力、方向、完了済みチャンクはページ内メモリにのみ保持し、ページを閉じると再開情報を失います。
 
-入力文・翻訳方向が変わると画面は前の結果を無効にします。ロード解除では、入力文とそのまま有効な翻訳結果を保持します。モデル取得、ロード、翻訳はそれぞれ明示的な操作で開始し、自動取得・自動推論は行いません。
+入力文・翻訳方向が変わると画面は前の結果を無効にします。ロード解除では、入力文とそのまま有効な翻訳結果を保持します。モデル取得、ロード、翻訳はそれぞれ明示的な操作で開始し、自動取得・自動推論は行いません。翻訳画面の状態見出しは、入力とロード状態に応じて「翻訳できます」「文章の入力待ち」「入力を確認してください」などを示し、翻訳ボタンの実行可否と一致させます。
 
 ```typescript
 import { createInferenceEngine, InferenceError } from './inference/index';

@@ -39,7 +39,58 @@ export function describeTranslation(
       validationError = cause instanceof Error ? cause.message : '入力を確認してください。';
     }
   }
+  const inputNeedsCorrection = !inputWithinLimit || Boolean(validationError);
   const canTranslate = !busy && loadedAndReady && hasText && inputWithinLimit && validDirection && !validationError;
+
+  let preparationHeading: string;
+  if (state.cancelling || state.engine.phase === 'stopping') {
+    preparationHeading = '処理を中止しています';
+  } else if (state.operation === 'loading') {
+    preparationHeading = 'モデルをロードしています';
+  } else if (state.operation === 'translating') {
+    preparationHeading = '翻訳中です';
+  } else if (state.operation === 'unloading') {
+    preparationHeading = 'モデルのロードを解除しています';
+  } else if (modelPhase === 'checking') {
+    preparationHeading = 'モデルの状態を確認しています';
+  } else if (downloadView.active) {
+    switch (modelPhase) {
+      case 'verifying':
+        preparationHeading = 'モデルを検証しています';
+        break;
+      case 'cancelling':
+        preparationHeading = 'モデルの取得を中止しています';
+        break;
+      case 'clearing':
+        preparationHeading = '保存モデルを削除しています';
+        break;
+      case 'updating-retention':
+        preparationHeading = '保持期間を更新しています';
+        break;
+      default:
+        preparationHeading = 'モデルを取得しています';
+    }
+  } else if (requiresUnload) {
+    preparationHeading = 'モデルのロード解除が必要です';
+  } else if (state.error && !loadedAndReady) {
+    preparationHeading = state.hasModelFile ? 'モデルの再ロードが必要です' : 'モデルを取得してください';
+  } else if (loadedAndReady && inputNeedsCorrection) {
+    preparationHeading = '入力を確認してください';
+  } else if (loadedAndReady && !validDirection) {
+    preparationHeading = '翻訳方向を確認してください';
+  } else if (loadedAndReady && !hasText) {
+    preparationHeading = '文章の入力待ち';
+  } else if (canTranslate) {
+    preparationHeading = '翻訳できます';
+  } else if (modelPhase === 'error') {
+    preparationHeading = 'モデルを取得できませんでした';
+  } else if (!state.hasModelFile) {
+    preparationHeading = 'モデルの取得が必要です';
+  } else if (!state.engine.modelLoaded) {
+    preparationHeading = 'モデルのロードが必要です';
+  } else {
+    preparationHeading = '翻訳の状態を確認してください';
+  }
 
   let status: string;
   if (modelPhase === 'checking') {
@@ -62,51 +113,70 @@ export function describeTranslation(
     status = 'モデルのロードを解除しています。入力と翻訳結果は保持します。';
   } else if (state.error && !loadedAndReady) {
     status = '処理を完了できませんでした。下の案内から回復できます。';
-  } else if (state.engine.modelLoaded) {
-    status = state.notice ?? '翻訳の準備ができました。文章を入力してください。';
-  } else if (state.hasModelFile) {
-    status = 'モデルを保存済みです。翻訳する前にロードしてください。';
+  } else if (loadedAndReady && inputNeedsCorrection) {
+    status = !inputWithinLimit
+      ? `入力は${MAX_INPUT_CHARACTERS}文字までです。文章を短くしてください。`
+      : validationError;
+  } else if (loadedAndReady && !validDirection) {
+    status = '日本語と英語の異なる方向を選択してください。';
+  } else if (loadedAndReady && !hasText) {
+    status = state.notice ?? 'モデルはロード済みです。文章を入力してください。';
+  } else if (loadedAndReady && canTranslate) {
+    status = state.notice ??
+      `${LANGUAGE_NAMES[direction.sourceLanguage]}から${LANGUAGE_NAMES[direction.targetLanguage]}へ翻訳できます。`;
   } else if (modelPhase === 'error') {
     status = downloadView.status;
+  } else if (!state.hasModelFile) {
+    status = cacheAvailable
+      ? '翻訳を始めるには、モデルを取得してロードしてください。'
+      : 'モデルを取得する前に、保存方法を選んでください。';
+  } else if (state.hasModelFile && !state.engine.modelLoaded) {
+    status = '保存済みモデルをロードすると、翻訳できます。';
   } else {
-    status = '翻訳を始めるには、モデルを取得してロードしてください。';
+    status = '翻訳を始められるか確認しています。';
   }
 
   let preparationHint = '';
   if (modelPhase === 'checking') {
-    preparationHint = '取得やロードは自動で始まりません。';
+    preparationHint = 'モデルは自動で取得・ロードされません。';
   } else if (modelPhase === 'downloading' || modelPhase === 'verifying' || modelPhase === 'cancelling') {
     preparationHint = 'モデルの処理が終わるまで翻訳と設定変更はできません。';
   } else if (downloadView.active) {
-    preparationHint = 'モデルの処理が終わると、翻訳の準備ができます。';
+    preparationHint = 'モデルの処理が終わると、ロードできます。';
   } else if (state.operation !== 'idle') {
     preparationHint = '処理中は文章や言語の変更、モデル設定を行えません。';
   } else if (requiresUnload) {
     preparationHint = hasPartialResult
       ? 'リソースを解放してから保存済みモデルをロードしてください。部分結果は保持します。'
       : 'リソースを解放してからモデルをロードし直してください。';
-  } else if (state.error && state.hasModelFile && !state.engine.modelLoaded) {
-    preparationHint = 'モデルのロードに失敗しました。設定を確認して再試行してください。';
   } else if (modelPhase === 'error') {
     preparationHint = downloadView.error || 'モデルの取得に失敗しました。設定を開いて再試行してください。';
+  } else if (state.engine.modelLoaded) {
+    preparationHint = inputNeedsCorrection || !validDirection
+      ? '入力欄の案内に従って文章を修正してください。'
+      : !hasText
+        ? 'モデルはロード済みです。翻訳する文章を入力してください。'
+        : '入力文は端末内で処理され、このページには保存されません。';
+  } else if (state.error && state.hasModelFile) {
+    preparationHint = 'モデルをロードできませんでした。設定を確認して再ロードしてください。';
   } else if (!state.hasModelFile) {
     preparationHint = cacheAvailable
       ? 'モデルの取得には約 573 MB が必要です。'
       : 'ブラウザー保存が使えない場合は、設定からメモリ保存を選べます。';
-  } else if (!state.engine.modelLoaded) {
-    preparationHint = '保存済みのモデルをロードすると翻訳できます。';
   } else {
-    preparationHint = '入力文は端末内で処理され、このページには保存されません。';
+    preparationHint = '保存済みモデルをロードすると翻訳を始められます。';
   }
 
   let translateDisabledReason = '';
-  if (sessionBusy) {
+  if (canTranslate) {
+    translateDisabledReason = '';
+  } else if (sessionBusy) {
     translateDisabledReason = '現在の処理が終わるまでお待ちください。';
   } else if (downloadView.active) {
     translateDisabledReason = 'モデルの処理が終わってから翻訳できます。';
-  } else if (!state.hasModelFile) {
+  } else if (!loadedAndReady && !state.hasModelFile) {
     translateDisabledReason = '先にモデルを取得してください。';
-  } else if (!state.engine.modelLoaded) {
+  } else if (!loadedAndReady && !state.engine.modelLoaded) {
     translateDisabledReason = '先に保存済みのモデルをロードしてください。';
   } else if (!loadedAndReady) {
     translateDisabledReason = 'モデルを利用できません。ロード解除してから再度ロードしてください。';
@@ -128,7 +198,7 @@ export function describeTranslation(
   } else if (!busy && state.hasModelFile && !state.engine.modelLoaded && !state.modelInUse) {
     preparationAction = 'load';
     preparationActionLabel = state.error ? 'モデルを再ロード' : 'モデルをロード';
-  } else if (!busy && !state.hasModelFile) {
+  } else if (!busy && !state.engine.modelLoaded && !state.hasModelFile) {
     preparationAction = 'download';
     preparationActionLabel = modelPhase === 'error'
       ? 'モデルを再取得'
@@ -198,6 +268,7 @@ export function describeTranslation(
     : '出力上限に達したため、途中で切れている可能性があります。文章を分けて再度翻訳してください。';
 
   return {
+    preparationHeading,
     status,
     preparationHint,
     preparationAction,
