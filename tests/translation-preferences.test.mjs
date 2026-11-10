@@ -64,7 +64,7 @@ test('preferences save and restore only the allowlisted direction and backend', 
       requestedBackend: 'cpu',
     },
   });
-  assert.deepEqual(storage.calls.writes, [storage.calls.writes[0]]);
+  assert.equal(storage.calls.writes.length, 1);
 });
 
 test('malformed JSON and unsupported preference schemas fall back without rewriting storage', async t => {

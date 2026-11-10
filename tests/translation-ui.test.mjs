@@ -261,6 +261,26 @@ test('target selection and swapping save the new translation direction', async (
   });
 });
 
+test('unavailable saved preferences show a warning and apply default values', async () => {
+  const document = createFakeDocument(TRANSLATION_IDS);
+  const preferenceStore = {
+    load: () => ({
+      preferences: DEFAULT_TRANSLATION_PREFERENCES,
+      notice: 'unavailable',
+    }),
+    save: () => true,
+  };
+
+  await withFakeDom(document, async () => {
+    mountTranslation(createSession(), createDownloadUI(), preferenceStore);
+    assert.equal(document.getElementById('source-language').value, 'ja');
+    assert.equal(document.getElementById('target-language').value, 'en');
+    assert.equal(document.getElementById('runtime-backend').value, 'auto');
+    assert.match(document.getElementById('preferences-status').textContent, /設定を読み込めません/);
+    assert.equal(document.getElementById('translate-button').disabled, true);
+  });
+});
+
 test('input edits do not save preferences and a failed save does not block translation', async () => {
   const document = createFakeDocument(TRANSLATION_IDS);
   const calls = { saves: 0 };
