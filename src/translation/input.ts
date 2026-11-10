@@ -7,7 +7,7 @@ export interface TranslationDirection {
   readonly targetLanguage: Language;
 }
 
-export const MAX_INPUT_CHARACTERS = 500;
+export const MAX_INPUT_CHARACTERS = 10_000;
 
 const SUPPORTED_LANGUAGES: readonly Language[] = Object.freeze(['ja', 'en']);
 

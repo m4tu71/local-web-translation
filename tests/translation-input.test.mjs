@@ -7,11 +7,11 @@ import {
 
 const JA_TO_EN = Object.freeze({ sourceLanguage: 'ja', targetLanguage: 'en' });
 
-test('accepts exactly 500 UTF-16 code units', () => {
+test('accepts exactly 10,000 UTF-16 code units', () => {
   validateTranslationInput('a'.repeat(MAX_INPUT_CHARACTERS), JA_TO_EN);
   assert.throws(
     () => validateTranslationInput('a'.repeat(MAX_INPUT_CHARACTERS + 1), JA_TO_EN),
-    { code: 'invalid-input', message: /500文字以内/ },
+    { code: 'invalid-input', message: /10000文字以内/ },
   );
 });
 
@@ -19,7 +19,7 @@ test('counts astral characters as two UTF-16 code units', () => {
   validateTranslationInput('😀'.repeat(MAX_INPUT_CHARACTERS / 2), JA_TO_EN);
   assert.throws(
     () => validateTranslationInput('😀'.repeat(MAX_INPUT_CHARACTERS / 2) + 'a', JA_TO_EN),
-    { code: 'invalid-input', message: /500文字以内/ },
+    { code: 'invalid-input', message: /10000文字以内/ },
   );
 });
 
