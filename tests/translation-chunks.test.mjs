@@ -18,6 +18,13 @@ test('splits within a conservative token budget and preserves source separators'
   }
 });
 
+test('keeps a short sentence as one inference chunk', async () => {
+  const source = 'The meeting starts at nine.';
+  const chunks = await splitTranslationText(source, 100, async text => text.length);
+  assert.equal(chunks.length, 1);
+  assert.equal(chunks[0].text, source);
+});
+
 test('prefers paragraph, then sentence, then whitespace boundaries', async () => {
   const paragraphText = 'First paragraph.\n\nSecond paragraph.';
   const paragraphChunks = await splitTranslationText(
@@ -33,7 +40,16 @@ test('prefers paragraph, then sentence, then whitespace boundaries', async () =>
     async text => text.length,
   );
   assert.equal(sentenceChunks[0].text, 'First sentence.');
-  assert.equal(sentenceChunks[0].separator, '');
+  assert.equal(sentenceChunks[0].separator, ' ');
+
+  const lineBreakChunks = await splitTranslationText(
+    'First sentence.\nNext sentence.',
+    'First sentence.'.length,
+    async text => text.length,
+  );
+  assert.equal(lineBreakChunks[0].text, 'First sentence.');
+  assert.equal(lineBreakChunks[0].separator, '\n');
+  assert.equal(sourceFrom(lineBreakChunks), 'First sentence.\nNext sentence.');
 
   const wordChunks = await splitTranslationText('one two three four', 8, async text => text.length);
   assert.equal(wordChunks[0].separator, ' ');

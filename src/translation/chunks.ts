@@ -4,7 +4,7 @@ export interface TranslationChunk {
   readonly separator: string;
 }
 
-export type InputTokenUpperBound = (text: string) => Promise<number>;
+export type InputTokenUpperBound = (text: string) => number | Promise<number>;
 
 /**
  * Splits source text without losing or reordering any UTF-16 code units.
@@ -21,11 +21,20 @@ export async function splitTranslationText(
   }
 
   if (!text.length) return Object.freeze([]);
+  if (await getInputTokenUpperBound(text) <= maxInputTokens) {
+    return Object.freeze([Object.freeze({ text, separator: '' })]);
+  }
 
   const chunks: TranslationChunk[] = [];
   let start = 0;
 
   while (start < text.length) {
+    const remaining = text.slice(start);
+    if (await getInputTokenUpperBound(remaining) <= maxInputTokens) {
+      chunks.push(Object.freeze({ text: remaining, separator: '' }));
+      break;
+    }
+
     const end = await findFittingEnd(text, start, maxInputTokens, getInputTokenUpperBound);
     if (end === undefined) {
       throw new RangeError(
@@ -100,7 +109,7 @@ function findParagraphBoundary(text: string, start: number, maxEnd: number): Spl
   let match: RegExpExecArray | null;
   let candidate: SplitBoundary | undefined;
 
-  while ((match = pattern.exec(text)) !== null && match.index + match[0].length <= maxEnd) {
+  while ((match = pattern.exec(text)) !== null && match.index <= maxEnd) {
     if (match.index > start) {
       candidate = { contentEnd: match.index, nextStart: match.index + match[0].length };
     }
@@ -118,7 +127,14 @@ function findSentenceBoundary(text: string, start: number, maxEnd: number): Spli
   while ((match = pattern.exec(text)) !== null && match.index + match[0].length <= maxEnd) {
     const boundary = match.index + match[0].length;
     if (boundary > start && boundary < text.length) {
-      candidate = { contentEnd: boundary, nextStart: boundary };
+      let nextStart = boundary;
+      while (nextStart < text.length && /\s/u.test(text[nextStart])) {
+        nextStart = nextCodePointEnd(text, nextStart);
+      }
+      candidate = {
+        contentEnd: boundary,
+        nextStart: nextStart > boundary ? nextStart : boundary,
+      };
     }
   }
 
@@ -131,8 +147,8 @@ function findWhitespaceBoundary(text: string, start: number, maxEnd: number): Sp
   let match: RegExpExecArray | null;
   let candidate: SplitBoundary | undefined;
 
-  while ((match = pattern.exec(text)) !== null && match.index + match[0].length <= maxEnd) {
-    if (match.index > start && match.index + match[0].length < text.length) {
+  while ((match = pattern.exec(text)) !== null && match.index <= maxEnd) {
+    if (match.index > start) {
       candidate = { contentEnd: match.index, nextStart: match.index + match[0].length };
     }
   }
