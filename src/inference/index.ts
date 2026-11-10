@@ -4,10 +4,13 @@ import type { InferenceEngine } from './types.ts';
 export { InferenceError } from './types.ts';
 export type {
   InferenceEngine,
+  InferenceRuntimeInfo,
   InferenceState,
   InferencePhase,
   InferenceErrorCode,
   ModelLoadOptions,
+  TranslationBudget,
+  TranslationOptions,
   TranslationRequest,
   TranslationResult,
 } from './types.ts';

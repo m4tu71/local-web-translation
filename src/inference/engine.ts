@@ -5,7 +5,10 @@ import {
   type InferenceEngine,
   type InferencePhase,
   type InferenceState,
+  type InferenceRuntimeInfo,
   type ModelLoadOptions,
+  type TranslationBudget,
+  type TranslationOptions,
   type TranslationRequest,
   type TranslationResult,
 } from './types.ts';
@@ -41,6 +44,7 @@ export class InferenceController implements InferenceEngine {
   private closing = false;
   private disposal?: Promise<void>;
   private loaded = false;
+  private runtimeInfo?: InferenceRuntimeInfo;
 
   private readonly createRuntime: RuntimeFactory;
 
@@ -88,11 +92,21 @@ export class InferenceController implements InferenceEngine {
       signal.throwIfAborted();
       await this.runtime.load(modelFiles, settings);
       signal.throwIfAborted();
+      const reportedRuntimeInfo = this.runtime.getRuntimeInfo?.();
+      this.runtimeInfo = reportedRuntimeInfo
+        ? Object.freeze({ ...reportedRuntimeInfo })
+        : Object.freeze({
+          backend: 'unknown',
+          contextSize: settings.contextSize,
+          requestedContextSize: settings.contextSize,
+          source: 'ランタイムが実行情報を公開していないため、要求した設定を使用',
+          contextSizeSource: 'requested',
+        });
       this.loaded = true;
     });
   }
 
-  async translate(request: TranslationRequest): Promise<TranslationResult> {
+  getTranslationBudget(request: TranslationRequest): TranslationBudget {
     this.assertAvailable();
     if (!this.runtime || !this.loaded) {
       throw new InferenceError('not-ready', '先にモデルをロードしてください。');
@@ -101,9 +115,62 @@ export class InferenceController implements InferenceEngine {
     const prompt = buildTranslationPrompt(request);
     const maxTokens = request.maxTokens ?? DEFAULT_TRANSLATION_MAX_TOKENS;
     positiveInteger(maxTokens, 'maxTokens');
+    const getUpperBound = this.runtime.getInputTokenUpperBound;
+    if (!getUpperBound) {
+      throw new InferenceError('unsupported', 'この推論エンジンでは安全な入力長を確認できません。');
+    }
+
+    const inputTokenUpperBound = getUpperBound.call(this.runtime, prompt);
+    const contextSize = this.runtimeInfo?.contextSize;
+    if (!Number.isSafeInteger(inputTokenUpperBound) || inputTokenUpperBound < 1 ||
+        contextSize === undefined || !Number.isSafeInteger(contextSize) || contextSize < 1) {
+      throw new InferenceError('unsupported', 'モデルの入力上限を安全に確認できません。');
+    }
+
+    return Object.freeze({
+      inputTokenUpperBound,
+      contextSize,
+      maxOutputTokens: maxTokens,
+      method: 'utf8-upper-bound',
+      fits: inputTokenUpperBound + maxTokens <= contextSize,
+    });
+  }
+
+  async translate(request: TranslationRequest, options: TranslationOptions = {}): Promise<TranslationResult> {
+    this.assertAvailable();
+    if (!this.runtime || !this.loaded) {
+      throw new InferenceError('not-ready', '先にモデルをロードしてください。');
+    }
+
+    const requestSnapshot = Object.freeze({ ...request });
+    const prompt = buildTranslationPrompt(requestSnapshot);
+    const maxTokens = requestSnapshot.maxTokens ?? DEFAULT_TRANSLATION_MAX_TOKENS;
+    const progressListener = options.onText;
+    const budget = this.getTranslationBudget(requestSnapshot);
+    if (!budget.fits) {
+      throw new InferenceError(
+        'invalid-input',
+        '入力がモデルの処理上限を超えています。文章を短くするか、分割してください。',
+      );
+    }
+
     const runtime = this.runtime;
     return this.run('translating', async signal => {
-      const result = await runtime.complete(prompt, { maxTokens, signal });
+      const operation = this.active;
+      const result = await runtime.complete(prompt, {
+        maxTokens,
+        signal,
+        onText: cumulativeText => {
+          if (signal.aborted || !operation || this.active !== operation || this.runtime !== runtime) {
+            return;
+          }
+          try {
+            progressListener?.(cumulativeText);
+          } catch {
+            // Progress observers must not abort model inference.
+          }
+        },
+      });
       return Object.freeze({
         text: result.text,
         truncated: result.finishReason === 'length',
@@ -241,12 +308,16 @@ export class InferenceController implements InferenceEngine {
     if (this.runtime) {
       await this.runtime.dispose();
       this.runtime = undefined;
+      this.runtimeInfo = undefined;
+    } else {
+      this.runtimeInfo = undefined;
     }
   }
 
   private publish(phase: InferencePhase, error?: InferenceError): void {
     const state: InferenceState = Object.freeze({
       phase, modelLoaded: this.loaded,
+      ...(this.runtimeInfo ? { runtimeInfo: this.runtimeInfo } : {}),
       ...(error ? { error: Object.freeze({ code: error.code, message: error.message }) } : {}),
     });
     this.state = state;
