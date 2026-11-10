@@ -78,15 +78,16 @@
               <textarea
                 id="translation-input"
                 rows="9"
-                maxlength="500"
+                maxlength="10000"
                 placeholder="翻訳する文章を入力してください"
                 aria-describedby="input-help input-count input-message"
                 spellcheck="true"
               ></textarea>
               <div class="input-meta">
-                <p id="input-help" class="muted-copy">最大 500 文字。入力文はこのページ内だけで扱い、保存しません。</p>
-                <p id="input-count" class="character-count">0 / 500</p>
+                <p id="input-help" class="muted-copy">最大 10,000 文字。入力文はこのページ内だけで扱い、保存しません。</p>
+                <p id="input-count" class="character-count">0 / 10000</p>
               </div>
+              <p class="muted-copy long-translation-note">長い文章は自動で区切って翻訳します。文脈が分かれる場合があります。</p>
               <p id="input-message" class="inline-message" aria-live="polite"></p>
               <div class="pane-actions input-actions">
                 <div class="secondary-actions">
@@ -108,7 +109,12 @@
               <div id="translation-output" class="translation-output" role="region" aria-labelledby="result-heading" aria-live="off" aria-busy="false" tabindex="0" dir="auto">
                 <p class="empty-result">翻訳結果はここに表示されます。</p>
               </div>
-              <p id="translation-status" class="translation-status" role="status" aria-live="polite" aria-atomic="true"></p>
+              <p id="translation-status" class="translation-status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></p>
+              <p id="runtime-summary" class="runtime-summary" role="status" aria-live="polite" aria-atomic="true">実際の実行環境: ロード後に確認できます</p>
+              <div class="resume-actions">
+                <button id="resume-translation" type="button" hidden>未完了の箇所から再開</button>
+                <p id="resume-hint" class="muted-copy" hidden></p>
+              </div>
               <p id="copy-status" class="copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
               <p id="result-warning" class="warning-message" role="alert" hidden></p>
               <p id="result-timing" class="result-timing" hidden></p>
@@ -182,6 +188,14 @@
               <button id="model-load" class="button-primary" type="button" disabled>翻訳の準備</button>
               <button id="model-unload" type="button" disabled>ロードを解除</button>
             </div>
+            <dl class="runtime-details">
+              <div><dt>要求した実行設定</dt><dd id="requested-backend-detail">自動選択（WebGPU 優先）</dd></div>
+              <div><dt>実際の実行環境</dt><dd id="runtime-backend-detail">確認できません</dd></div>
+              <div><dt>ブラウザーの WebGPU API</dt><dd id="runtime-webgpu-api">ロード後に確認できます</dd></div>
+              <div id="runtime-context-row" hidden><dt>実行コンテキスト</dt><dd id="runtime-context-detail"></dd></div>
+              <div id="runtime-gpu-layers-row" hidden><dt>GPU に割り当てたレイヤー</dt><dd id="runtime-gpu-layers-detail"></dd></div>
+            </dl>
+            <p class="muted-copy">WebGPU API の有無は、実際に GPU で翻訳したことを示しません。</p>
             <p class="muted-copy">ロードを解除しても、選択した保存先のモデルは削除しません。</p>
           </section>
 

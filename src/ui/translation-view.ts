@@ -25,6 +25,11 @@ export function describeTranslation(
   const inputWithinLimit = text.length <= MAX_INPUT_CHARACTERS;
   const loadedAndReady = state.engine.modelLoaded && state.engine.phase === 'ready';
   const requiresUnload = state.modelInUse && !loadedAndReady;
+  const progress = state.translationProgress;
+  const result = state.result;
+  const hasPartialResult = result?.status === 'partial';
+  const canResume = Boolean(hasPartialResult && result.canResume);
+  const runtimeInfo = state.engine.runtimeInfo;
   const validDirection = direction.sourceLanguage !== direction.targetLanguage;
   let validationError = '';
   if (hasText && inputWithinLimit && validDirection) {
@@ -46,7 +51,13 @@ export function describeTranslation(
   } else if (state.operation === 'loading') {
     status = 'モデルをロードしています。初回は時間がかかる場合があります。';
   } else if (state.operation === 'translating') {
-    status = `${LANGUAGE_NAMES[direction.sourceLanguage]}から${LANGUAGE_NAMES[direction.targetLanguage]}へ翻訳しています。`;
+    if (progress?.phase === 'planning') {
+      status = '文章を分けて準備しています。';
+    } else if (progress?.phase === 'translating' && progress.total !== undefined) {
+      status = `翻訳中 ${Math.min(progress.completed + 1, progress.total)} / ${progress.total}`;
+    } else {
+      status = `${LANGUAGE_NAMES[direction.sourceLanguage]}から${LANGUAGE_NAMES[direction.targetLanguage]}へ翻訳しています。`;
+    }
   } else if (state.operation === 'unloading') {
     status = 'モデルのロードを解除しています。入力と翻訳結果は保持します。';
   } else if (state.error && !loadedAndReady) {
@@ -70,8 +81,10 @@ export function describeTranslation(
     preparationHint = 'モデルの処理が終わると、翻訳の準備ができます。';
   } else if (state.operation !== 'idle') {
     preparationHint = '処理中は文章や言語の変更、モデル設定を行えません。';
-  } else if (state.error && requiresUnload) {
-    preparationHint = 'ロード解除を再試行してから、モデルをロードし直してください。';
+  } else if (requiresUnload) {
+    preparationHint = hasPartialResult
+      ? 'リソースを解放してから保存済みモデルをロードしてください。部分結果は保持します。'
+      : 'リソースを解放してからモデルをロードし直してください。';
   } else if (state.error && state.hasModelFile && !state.engine.modelLoaded) {
     preparationHint = 'モデルのロードに失敗しました。設定を確認して再試行してください。';
   } else if (modelPhase === 'error') {
@@ -109,9 +122,9 @@ export function describeTranslation(
 
   let preparationAction: 'download' | 'load' | 'unload' | undefined;
   let preparationActionLabel = '';
-  if (!busy && state.error && requiresUnload) {
+  if (!busy && requiresUnload) {
     preparationAction = 'unload';
-    preparationActionLabel = 'ロード解除を再試行';
+    preparationActionLabel = state.error ? 'ロード解除を再試行' : 'リソースを解放';
   } else if (!busy && state.hasModelFile && !state.engine.modelLoaded && !state.modelInUse) {
     preparationAction = 'load';
     preparationActionLabel = state.error ? 'モデルを再ロード' : '翻訳の準備';
@@ -124,6 +137,65 @@ export function describeTranslation(
 
   const canAbortSession = ['loading', 'translating'].includes(state.operation) && !state.cancelling && state.engine.phase !== 'stopping';
   const canAbortDownload = downloadView.canAbort;
+  const partialReason = hasPartialResult ? result.partialReason : undefined;
+  const partialProgress = hasPartialResult
+    ? typeof result.completedChunks === 'number' && typeof result.totalChunks === 'number'
+      ? `完了 ${result.completedChunks} / ${result.totalChunks} 区切り。`
+      : ''
+    : '';
+  const resultStatus = state.operation === 'translating'
+    ? progress?.phase === 'planning'
+      ? '文章を分けて準備しています。'
+      : progress?.phase === 'translating' && progress.total !== undefined
+        ? `翻訳中 ${Math.min(progress.completed + 1, progress.total)} / ${progress.total}`
+        : '翻訳中です。分割数を確認しています。'
+    : hasPartialResult
+      ? partialReason === 'cancelled'
+        ? `翻訳を中止しました。表示中の文章は途中までです。${partialProgress}`
+        : partialReason === 'truncated'
+          ? canResume
+            ? `出力上限に達しました。さらに短く区切って再開できます。${partialProgress}`
+            : `出力上限に達しました。入力を短くしてください。${partialProgress}`
+          : partialReason === 'empty'
+            ? canResume
+              ? `出力が空でした。再開するか、入力を編集して最初から翻訳してください。${partialProgress}`
+              : `出力が空でした。入力を編集して最初から翻訳してください。${partialProgress}`
+            : `翻訳を完了できませんでした。表示中の文章は途中までです。${partialProgress}`
+      : result
+        ? result.text.trim()
+          ? '翻訳が完了しました。'
+          : '翻訳は完了しましたが、出力が空でした。入力を確認してください。'
+        : state.notice ?? '';
+
+  const runtimeBackendName = !state.engine.modelLoaded
+    ? 'ロード後に確認できます'
+    : runtimeInfo?.backend === 'gpu'
+      ? 'GPU'
+      : runtimeInfo?.backend === 'cpu'
+        ? 'CPU（WASM）'
+        : '確認できません';
+  const runtimeSummary = state.engine.modelLoaded
+    ? `実際の実行環境: ${runtimeBackendName}`
+    : '実際の実行環境: ロード後に確認できます';
+  const runtimeWebGpuApi = !state.engine.modelLoaded
+    ? 'ロード後に確認できます'
+    : runtimeInfo?.webGpuApiAvailable === true
+      ? 'あり'
+      : runtimeInfo?.webGpuApiAvailable === false
+        ? 'なし'
+        : '確認できません';
+  const reportedContextSize = runtimeInfo?.actualContextSize ??
+    (runtimeInfo?.contextSizeSource === 'runtime' ? runtimeInfo.contextSize : undefined);
+  const runtimeContext = runtimeInfo
+    ? reportedContextSize !== undefined
+      ? `${reportedContextSize} トークン（エンジン報告値）`
+      : `${runtimeInfo.contextSize} トークン（要求値）`
+    : '';
+  const truncatedWarningText = hasPartialResult && partialReason === 'truncated'
+    ? canResume
+      ? '出力上限に達したため途中までです。未完了の部分をさらに細かく分けて再開できます。'
+      : '出力上限に達したため途中までです。これ以上小さく分けられないため、入力を短くしてください。'
+    : '出力上限に達したため、途中で切れている可能性があります。文章を分けて再度翻訳してください。';
 
   return {
     status,
@@ -148,20 +220,41 @@ export function describeTranslation(
     inputInvalid: inputWithinLimit === false || Boolean(validationError),
     inputError: validationError,
     canClearInput: !sessionBusy && Boolean(text),
-    canCopyResult: !sessionBusy && Boolean(state.result?.text.trim()),
-    resultPlaceholder: state.result
-      ? '翻訳結果が空でした。入力を確認して再度翻訳してください。'
-      : '翻訳結果はここに表示されます。',
-    resultStatus: state.result
-      ? state.result.text.trim()
-        ? '翻訳が完了しました。'
-        : '翻訳は完了しましたが、出力が空でした。入力を確認してください。'
-      : state.notice ?? '',
-    showTruncatedWarning: Boolean(state.result?.truncated),
-    showTiming: Boolean(state.result),
+    canCopyResult: !sessionBusy && result?.status !== 'streaming' && Boolean(result?.text.trim()),
+    copyResultLabel: hasPartialResult ? '部分結果をコピー' : '結果をコピー',
+    resultPlaceholder: result?.status === 'streaming' && !result.text.trim()
+      ? '翻訳中です。最初の出力を待っています。'
+      : hasPartialResult
+        ? result.text.trim()
+          ? '部分結果はここに表示されます。'
+          : partialReason === 'empty'
+            ? '翻訳結果は空でした。'
+            : '途中の出力はまだありません。'
+        : result
+          ? '翻訳結果が空でした。入力を確認して再度翻訳してください。'
+          : '翻訳結果はここに表示されます。',
+    resultStatus,
+    showResume: canResume,
+    canResume: canResume && loadedAndReady && !busy,
+    resumeHint: canResume && !loadedAndReady
+      ? !state.hasModelFile
+        ? '再開にはモデルの取得とロードが必要です。上の準備操作を行ってください。'
+        : '再開にはモデルのロードが必要です。上の準備操作を行ってください。'
+      : '',
+    showTruncatedWarning: Boolean(result?.truncated),
+    truncatedWarningText,
+    showTiming: Boolean(result && result.status === 'complete'),
     showError: Boolean(state.error),
     errorText: state.error ?? '',
     showOpenLogs: Boolean(state.error || !state.result?.text.trim()),
-    runtimeBackend: state.requestedBackend ?? 'auto',
+    runtimeSummary,
+    runtimeBackendName,
+    runtimeWebGpuApi,
+    showRuntimeContext: Boolean(runtimeInfo),
+    runtimeContext,
+    showRuntimeGpuLayers: typeof runtimeInfo?.gpuLayers === 'number',
+    runtimeGpuLayers: typeof runtimeInfo?.gpuLayers === 'number'
+      ? `${runtimeInfo.gpuLayers} 層`
+      : '',
   };
 }
