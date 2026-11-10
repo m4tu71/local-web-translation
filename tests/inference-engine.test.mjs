@@ -13,9 +13,20 @@ function deferred() {
 }
 function fake(overrides = {}) {
   const calls = { load: [], complete: [], dispose: 0 };
+  let loadedContextSize = 2048;
   const runtime = {
-    async load(...args) { calls.load.push(args); },
+    async load(...args) {
+      calls.load.push(args);
+      loadedContextSize = args[1]?.contextSize ?? 2048;
+    },
     async complete(...args) { calls.complete.push(args); return { text: 'Fixture output', finishReason: 'stop' }; },
+    getInputTokenUpperBound(prompt) { return new TextEncoder().encode(prompt).byteLength + 1; },
+    getRuntimeInfo() {
+      return {
+        backend: 'unknown', contextSize: loadedContextSize,
+        requestedContextSize: loadedContextSize, contextSizeSource: 'runtime',
+      };
+    },
     async dispose() { calls.dispose++; },
     ...overrides,
   };
@@ -67,6 +78,81 @@ test('PFML3 matches the official single-sentence prompt and omits BOS', () => {
     '<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>en<|plamo:msg|>');
   assert(buildTranslationPrompt({ ...request, sourceLanguage: 'ja' })
     .includes('input<|plamo:key|>lang<|plamo:val|>ja<|plamo:msg|>'));
+});
+
+test('translation budget uses a pinned-engine upper bound and rejects input beyond context', async () => {
+  const { runtime, calls } = fake();
+  const engine = new InferenceController(async () => runtime);
+  await engine.loadModel(model());
+
+  const budget = engine.getTranslationBudget(request);
+  assert.equal(budget.method, 'utf8-upper-bound');
+  assert.equal(budget.fits, true);
+  assert.equal(budget.contextSize, 2048);
+  assert.equal(budget.maxOutputTokens, 512);
+  assert.equal(budget.inputTokenUpperBound,
+    new TextEncoder().encode(buildTranslationPrompt(request)).byteLength + 1);
+
+  const oversized = { ...request, text: 'あ'.repeat(1000) };
+  assert.equal(engine.getTranslationBudget(oversized).fits, false);
+  await assert.rejects(engine.translate(oversized), { code: 'invalid-input' });
+  assert.equal(calls.complete.length, 0);
+  await engine.dispose();
+});
+
+test('translation snapshots its prompt and ignores progress after its operation ends', async () => {
+  const { runtime, calls } = fake();
+  const lateCallbacks = [];
+  runtime.complete = async (...args) => {
+    calls.complete.push(args);
+    lateCallbacks.push(args[1].onText);
+    return { text: 'complete', finishReason: 'stop' };
+  };
+  const engine = new InferenceController(async () => runtime);
+  const mutableRequest = { ...request };
+  const progress = [];
+  engine.subscribe(state => {
+    if (state.phase === 'translating') mutableRequest.text = 'changed by listener';
+  });
+  await engine.loadModel(model());
+
+  await engine.translate(mutableRequest, { onText: text => progress.push(text) });
+  assert(calls.complete[0][0].includes(request.text));
+  assert(!calls.complete[0][0].includes('changed by listener'));
+  lateCallbacks[0]('stale text');
+  assert.deepEqual(progress, []);
+  await engine.dispose();
+});
+
+test('translation budget fails closed when the runtime has no bound implementation', async () => {
+  const { runtime, calls } = fake({ getInputTokenUpperBound: undefined });
+  const engine = new InferenceController(async () => runtime);
+  await engine.loadModel(model());
+  await assert.rejects(engine.translate(request), { code: 'unsupported' });
+  assert.equal(calls.complete.length, 0);
+  await engine.dispose();
+});
+
+test('runtime diagnostics are copied and missing backend data stays unknown', async () => {
+  const mutableInfo = {
+    backend: 'unknown', contextSize: 1024, requestedContextSize: 1024,
+    contextSizeSource: 'runtime',
+  };
+  const { runtime } = fake({ getRuntimeInfo() { return mutableInfo; } });
+  const engine = new InferenceController(async () => runtime);
+  await engine.loadModel(model(), { backend: 'cpu', contextSize: 1024 });
+  mutableInfo.backend = 'gpu';
+  assert.equal(engine.getState().runtimeInfo.backend, 'unknown');
+  assert(Object.isFrozen(engine.getState().runtimeInfo));
+  await engine.dispose();
+
+  const withoutDiagnostics = fake({ getRuntimeInfo: undefined });
+  const fallbackEngine = new InferenceController(async () => withoutDiagnostics.runtime);
+  await fallbackEngine.loadModel(model(), { backend: 'cpu', contextSize: 1024 });
+  assert.equal(fallbackEngine.getState().runtimeInfo.backend, 'unknown');
+  assert.equal(fallbackEngine.getState().runtimeInfo.contextSize, 1024);
+  assert.equal(fallbackEngine.getState().runtimeInfo.contextSizeSource, 'requested');
+  await fallbackEngine.dispose();
 });
 
 test('invalid input is rejected before runtime creation or generation', async () => {

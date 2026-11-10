@@ -1,6 +1,6 @@
 # UI から独立した推論 API
 
-状態: API と wllama アダプターを実装。API のライフサイクルをモックで検証。
+状態: API、逐次生成、分割翻訳、実行環境情報を実装。自動テストはモック推論で成功し、新しい翻訳画面を使った実ブラウザー・実モデル確認は未実施。
 利用者から旧画面での GPU（auto 要求設定）/ CPU（WASM）のロード・日本語1文翻訳・ロード解除の報告を受領しています。これは通常画面の実ブラウザー確認ではありません。通常画面の操作・状態要件は[翻訳画面設計書](translation-ui.md)を参照してください。
 
 ## 使用する API
@@ -11,10 +11,11 @@ UI は src/inference/index.ts の createInferenceEngine またはページ共通
 
 | メソッド | 動作 |
 | --- | --- |
-| getState() | 現在の変更不可な状態を取得 |
+| getState() | 現在の変更不可な状態を取得。ロード後は requested / effective context size と backend 確度を持つ `runtimeInfo` を含む |
 | subscribe(listener) | 現在の状態を即座に通知し、以後の変化を購読。解除関数を返す |
 | loadModel(files, options) | 取得済み GGUF の Blob / File 配列からロード |
-| translate(request) | ja / en の翻訳要求を PFML3 で処理し、text と truncated を返す |
+| translate(request, options?) | ja / en の翻訳要求を PFML3 で処理し、text と truncated を返す。`options.onText` が累積生成テキストを受け取る |
+| getTranslationBudget(request) | 完成した prompt の保守的な UTF-8 byte 上界、context、出力予約と適合可否を同期的に返す |
 | abort() | 実行中の操作を中止し、モデルの解放完了まで待つ |
 | dispose() | 実行中の操作の終了・リソース解放を待ち、エンジンを使用終了にする |
 
@@ -23,9 +24,13 @@ UI は src/inference/index.ts の createInferenceEngine またはページ共通
 固定モデルの取得と画面表示は別の [ModelDownloader](model-download.md) が担当する。
 取得後の Blob を loadModel([blob]) へ渡す UI は [TranslationSession](../src/poc/translation-session.ts) 経由で API を呼びます。過去の実モデル確認は[旧画面の検証記録](translation-poc.md)に限定して記録しています。
 
-通常画面から使う `TranslationSession.translate(text, direction)` は日本語 ↔ 英語の方向を受け取り、省略時は日本語 → 英語です。画面と TranslationSession は入力を最大 500 UTF-16 コード単位に制限し、空入力、同じ翻訳元・翻訳先、未対応言語、予約文字列を生成開始前に拒否します。方向は翻訳開始時に固定され、完了結果に `direction` として保持されます。低水準の `InferenceEngine.translate(request)` の要求型は画面上の 500 文字制限を表すものではありません。
+通常画面から使う `TranslationSession.translate(text, direction)` は日本語 ↔ 英語の方向を受け取り、省略時は日本語 → 英語です。画面と TranslationSession は入力を最大 10,000 UTF-16 コード単位に制限し、空入力、同じ翻訳元・翻訳先、未対応言語、予約文字列を生成開始前に拒否します。方向は翻訳開始時に固定され、結果に保持されます。低水準の `InferenceEngine.translate(request)` は長文の自動分割を行わず、budget に収まる 1 要求を処理します。分割・再開は TranslationSession の責務です。
 
-入力文・翻訳方向が変わると画面は前の結果を無効にします。ロード解除では、入力文とそのまま有効な翻訳結果を保持します。モデル取得、ロード、翻訳はそれぞれ明示的な操作で開始し、自動取得・自動推論は行いません。
+`getTranslationBudget(request)` は PFML3 template と方向を含む完成 prompt を検査し、`inputTokenUpperBound`、`contextSize`、`maxOutputTokens`、`method: 'utf8-upper-bound'`、`fits` を返します。固定 PLaMo 3 tokenizer では prompt の UTF-8 byte 数 + BOS 1 を入力 token 数の保守的な上界とします。これは実トークン数の計測ではなく、実際より小さい分割になる場合があります。出力予約を含めて context size 内に収まらない場合は `fits: false` です。tokenizer の前提検査に失敗した場合は翻訳を拒否します。
+
+`TranslationSession` は `translationProgress` の `planning` / `translating`、完了数、分割総数を状態購読者へ伝えます。部分結果は `streaming` / `partial` / `complete` と、該当する `cancelled` / `error` / `truncated` / `empty` 理由で区別します。再開可能な場合は `canResume` が true になり、`resumeTranslation(text, direction)` は現在の入力と方向を中断時の snapshot と照合した後、最後に完了していないチャンクから続けます。入力、方向、完了済みチャンクはページ内メモリにのみ保持し、ページを閉じると再開情報を失います。
+
+入力文・翻訳方向が変わると画面は前の結果を無効にします。ロード解除では、入力文とそのまま有効な翻訳結果を保持します。モデル取得、ロード、翻訳はそれぞれ明示的な操作で開始し、自動取得・自動推論は行いません。翻訳画面の状態見出しは、入力とロード状態に応じて「翻訳できます」「文章の入力待ち」「入力を確認してください」などを示し、翻訳ボタンの実行可否と一致させます。
 
 ```typescript
 import { createInferenceEngine, InferenceError } from './inference/index';
@@ -43,11 +48,23 @@ async function translateExample(modelFiles: readonly Blob[]): Promise<void> {
       threads: 1,
     });
 
+    const budget = engine.getTranslationBudget({
+      text: '会議は来週の月曜日に変更されました。',
+      sourceLanguage: 'ja',
+      targetLanguage: 'en',
+      maxTokens: 512,
+    });
+    console.log(budget.method, budget.inputTokenUpperBound, budget.fits);
+
     const result = await engine.translate({
       text: '会議は来週の月曜日に変更されました。',
       sourceLanguage: 'ja',
       targetLanguage: 'en',
       maxTokens: 512,
+    }, {
+      onText(cumulativeText) {
+        console.log(cumulativeText);
+      },
     });
 
     console.log(result.text, result.truncated);
@@ -69,8 +86,9 @@ async function translateExample(modelFiles: readonly Blob[]): Promise<void> {
 
 ## ロードと翻訳の設定
 
-- backend は auto または cpu。auto は wllama の GPU 自動選択を利用する指定で、GPU 実行の保証ではない。
-  cpu は n_gpu_layers: 0。初期値は contextSize: 2048、threads: 1、同時要求数: 1。
+- backend は auto または cpu。auto は wllama の GPU 自動選択を利用する要求設定だが、実際の GPU 実行は確認できないため `runtimeInfo.backend` は unknown。
+  cpu は n_gpu_layers: 0 と Worker の WebGPU 無効化を適用し、CPU と報告する。初期値は contextSize: 2048、threads: 1、同時要求数: 1。
+- `InferenceState.runtimeInfo` は `backend: 'cpu' | 'gpu' | 'unknown'`、`contextSize`、`requestedContextSize`、任意の `actualContextSize`、`contextSizeSource: 'runtime' | 'requested'` を含む。wllama が GPU レイヤー配置を公開しないため、GPU 名や layer 数を推測しない。任意の `webGpuApiAvailable` は WebGPU API の有無だけを表し、実際の GPU 利用を意味しない。
 - 翻訳先は ja / en。sourceLanguage は省略でき、指定する場合も ja / en。
 - temperature は 0、maxTokens の初期値は 512。正の整数を指定する。
 - PFML3 の dataset は translation。BOS は GGUF の設定に基づき llama.cpp が追加するため、
@@ -78,8 +96,8 @@ async function translateExample(modelFiles: readonly Blob[]): Promise<void> {
 - 停止文字列は <|plamo:tag|> と <|plamo:bos|>。トークン上限による終了は truncated: true として区別する。
 - 停止文字列と初期トークン上限は pfml.ts に集約する。生成時は ignore_eos: false、echo: false を明示し、
   EOS を有効にしたまま、入力プロンプトを翻訳結果に含めない。
-- ここでは生成途中のテキストを通知しない。状態通知はロード・翻訳などの段階を表し、
-  ダウンロードの進捗率・推論の進捗率ではない。
+- `translate` の `options.onText(cumulativeText)` は生成された累積テキストを逐次通知する。
+  これは生成 token 数や残り時間を示さない。通常の状態購読はロード・翻訳段階を表し、長文翻訳のチャンク進捗は TranslationSession が別途通知する。
 
 ## BOS と停止条件の確認
 
@@ -104,6 +122,8 @@ PFML3 は raw completion に渡し、チャットテンプレートや assistant
 入力末尾は output の <|plamo:msg|> とし、入力側へ EOS や停止用トークンを追加しない。
 モデルが生成する <|plamo:tag|> / <|plamo:bos|> を停止条件にする。
 
+UTF-8 byte 上界は、[固定版 llama.cpp の PLaMo 3 vocabulary](https://github.com/ggml-org/llama.cpp/blob/d38bea34227bbf9069d62fdc239c98ab6e05435a/src/llama-vocab.cpp#L1499) の通常 token 化と byte-fallback の実装を根拠とする。モデルや tokenizer の revision を変える場合はこの根拠を再検証する。
+
 ### 確認の根拠と限界
 
 - [公式 PFML3 説明（固定 revision）](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/blob/dbeb0856cb0b004b484f190bb71dd65876297013/README.md#pfml3-prompt-format)
@@ -124,8 +144,8 @@ loading / translating / stopping 中の新しいロード・翻訳は busy で�
 ロード済みモデルの差し替えは dispose 後に新しいエンジンを作って行う。
 状態購読関数の例外は処理を失敗させず、購読中の再入でも古い状態を後から通知しない。
 
-失敗は error 状態と InferenceError で通知する。主な code は invalid-input、busy、not-ready、
-disposed、load-failed、translation-failed、dispose-failed、cancelled。
+失敗は error 状態と InferenceError で通知する。主な code は invalid-input、unsupported、busy、not-ready、
+disposed、load-failed、translation-failed、dispose-failed、cancelled。`unsupported` は安全な入力上限を算出する情報が実行環境にない場合に返す。
 入力検証や busy の拒否は、進行中の正常な状態を error に置き換えない。
 ロード・翻訳自体の失敗時はリソースを解放する。解放できた場合は同じエンジンでロードを再試行できる。
 

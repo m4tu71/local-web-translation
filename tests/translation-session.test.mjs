@@ -30,13 +30,24 @@ function fixture(overrides = {}, hasModel = true) {
   const createEngine = () => {
     calls.factories++;
     return new InferenceController(async () => ({
-      async load(...args) { calls.loads.push(args); },
+      ...overrides,
+      async load(...args) {
+        if (overrides.load) return overrides.load(...args);
+        calls.loads.push(args);
+      },
       async complete(...args) {
         calls.completions.push(args);
+        if (overrides.complete) return overrides.complete(...args);
         return { text: 'The meeting has been moved to next Monday.', finishReason: 'stop' };
       },
-      async dispose() { calls.exits++; },
-      ...overrides,
+      getInputTokenUpperBound(prompt) {
+        if (overrides.getInputTokenUpperBound) return overrides.getInputTokenUpperBound(prompt);
+        return new TextEncoder().encode(prompt).length + 1;
+      },
+      async dispose(...args) {
+        calls.exits++;
+        if (overrides.dispose) return overrides.dispose(...args);
+      },
     }));
   };
   let clock = 0;
@@ -70,7 +81,7 @@ test('passes the existing Blob to load and translates Japanese to English by def
   assert(prompt.endsWith('output<|plamo:key|>lang<|plamo:val|>en<|plamo:msg|>'));
   assert.equal(options.maxTokens, 512);
   assert.equal(session.getState().result.text, 'The meeting has been moved to next Monday.');
-  assert.equal(session.getState().result.elapsedMs, 10);
+  assert(session.getState().result.elapsedMs >= 10);
   assert.equal(session.getState().result.truncated, false);
   assert.deepEqual(session.getState().result.direction, {
     sourceLanguage: 'ja',
@@ -129,7 +140,7 @@ test('captures a stable direction before asynchronous inference starts', async (
     targetLanguage: 'ja',
   });
   assert(Object.isFrozen(session.getState().result.direction));
-  assert.equal(calls.completions.length, 0);
+  assert.equal(calls.completions.length, 1);
 
   await session.unload();
 });
@@ -223,10 +234,15 @@ test('cache timestamp failures stay visible without turning successful inference
   await session.unload();
 });
 
-test('cancelled translation exposes no stale result and can reload without re-downloading', async () => {
+test('cancelled translation keeps its partial result and can resume after reloading', async () => {
   const entered = deferred();
+  let abortedOnce = false;
   const { session, source, calls } = fixture({
     complete(_prompt, { signal }) {
+      if (abortedOnce) {
+        return { text: 'resumed result', finishReason: 'stop' };
+      }
+      abortedOnce = true;
       entered.resolve();
       return new Promise((_resolve, reject) => {
         signal.addEventListener('abort', () => reject(signal.reason), { once: true });
@@ -238,15 +254,20 @@ test('cancelled translation exposes no stale result and can reload without re-do
   await entered.promise;
   await session.abort();
   await translating;
-  assert.equal(session.getState().result, undefined);
+  assert.equal(session.getState().result.status, 'partial');
+  assert.equal(session.getState().result.partialReason, 'cancelled');
+  assert.equal(session.getState().result.canResume, true);
   assert.equal(session.getState().error, undefined);
   assert.equal(session.getState().engine.modelLoaded, false);
   assert(source.getModel());
   assert.match(describeTranslation(session.getState(), '日本語').resultStatus, /中止/);
 
+  await session.unload();
   await session.load('cpu');
   assert.equal(calls.factories, 2);
   assert.equal(session.getState().engine.phase, 'ready');
+  await session.resumeTranslation('こんにちは', { sourceLanguage: 'ja', targetLanguage: 'en' });
+  assert.equal(session.getState().result.status, 'complete');
   await session.unload();
 });
 
@@ -268,7 +289,7 @@ test('input validation preserves loaded model and directs the user to fix input'
   const invalidInputs = [
     '',
     ' '.repeat(3),
-    'a'.repeat(501),
+    'a'.repeat(10_001),
     '<|plamo:tag|>',
   ];
   for (const text of invalidInputs) {
@@ -308,7 +329,10 @@ test('abort waits for cache-touch work and does not publish a stale translation 
 
   assert.equal(session.getState().operation, 'idle');
   assert.equal(session.getState().engine.modelLoaded, true);
-  assert.equal(session.getState().result, undefined);
+  assert.equal(session.getState().result.status, 'partial');
+  assert.equal(session.getState().result.partialReason, 'cancelled');
+  assert.equal(session.getState().result.text, 'The meeting has been moved to next Monday.');
+  assert.equal(session.getState().result.canResume, false);
   assert.equal(session.getState().error, undefined);
   assert.match(session.getState().notice, /もう一度翻訳できます/);
   await session.unload();
@@ -338,11 +362,262 @@ test('truncated and empty output remain distinguishable and logs have a fixed bo
     await session.translate('ユーザーの入力');
   }
   assert.equal(session.getState().result.truncated, true);
-  assert.match(describeTranslation(session.getState(), '日本語').resultStatus, /空/);
+  assert.equal(session.getState().result.status, 'partial');
+  assert.equal(session.getState().result.partialReason, 'truncated');
+  assert.equal(session.getState().result.text, '');
   assert.equal(session.getState().logs.length, 100);
   assert(!session.getState().logs.some(line => line.includes('ユーザーの入力')));
   assert(Object.isFrozen(session.getState()));
   assert(Object.isFrozen(session.getState().result));
   assert(Object.isFrozen(session.getState().logs));
+  await session.unload();
+});
+
+test('streams cumulative text into the current result and completes without a live result announcement', async () => {
+  const { session } = fixture({
+    async complete(_prompt, { onText }) {
+      onText('Hel');
+      onText('Hello');
+      return { text: 'Hello', finishReason: 'stop' };
+    },
+  });
+  const observed = [];
+  session.subscribe(state => {
+    if (state.result?.status === 'streaming') observed.push(state.result.text);
+  });
+  await session.load('auto');
+  await session.translate('こんにちは');
+
+  assert(observed.includes('Hel'));
+  assert(observed.includes('Hello'));
+  assert.equal(session.getState().result.status, 'complete');
+  assert.equal(session.getState().result.text, 'Hello');
+  await session.unload();
+});
+
+test('an aborted generation keeps received text and rejects a callback delivered after cancellation', async () => {
+  const entered = deferred();
+  const { session } = fixture({
+    complete(_prompt, { signal, onText }) {
+      onText('途中まで');
+      entered.resolve();
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          setTimeout(() => {
+            onText('遅れて届いた古い文章');
+            reject(signal.reason);
+          }, 0);
+        }, { once: true });
+      });
+    },
+  });
+  await session.load('auto');
+  const translating = assert.rejects(session.translate('これは長い文章'), { code: 'cancelled' });
+  await entered.promise;
+  await session.abort();
+  await translating;
+
+  assert.equal(session.getState().result.status, 'partial');
+  assert.equal(session.getState().result.partialReason, 'cancelled');
+  assert.equal(session.getState().result.text, '途中まで');
+  assert.equal(session.getState().result.canResume, true);
+  await session.unload();
+});
+
+test('ignores a completed chunk callback after the next chunk has started', async () => {
+  const secondChunkEntered = deferred();
+  const secondChunk = deferred();
+  let state = { phase: 'idle', modelLoaded: false };
+  let oldProgressCallback;
+  let callCount = 0;
+  const listeners = new Set();
+  const engine = {
+    getState: () => state,
+    subscribe(listener) {
+      listeners.add(listener);
+      listener(state);
+      return () => listeners.delete(listener);
+    },
+    async loadModel() {
+      state = { phase: 'ready', modelLoaded: true };
+      for (const listener of listeners) listener(state);
+    },
+    getTranslationBudget(request) {
+      const inputTokenUpperBound = request.text.length + 50;
+      return {
+        inputTokenUpperBound,
+        contextSize: 2_048,
+        maxOutputTokens: request.maxTokens,
+        method: 'utf8-upper-bound',
+        fits: inputTokenUpperBound + request.maxTokens <= 2_048,
+      };
+    },
+    async translate(_request, { onText }) {
+      callCount++;
+      if (callCount === 1) {
+        oldProgressCallback = onText;
+        onText('最初の出力');
+        return { text: '最初の出力', truncated: false };
+      }
+      if (callCount === 2) {
+        onText('現在の出力');
+        secondChunkEntered.resolve();
+        return secondChunk.promise;
+      }
+      return { text: `出力${callCount}`, truncated: false };
+    },
+    async abort() {},
+    async dispose() {
+      state = { phase: 'disposed', modelLoaded: false };
+    },
+  };
+  const model = new Blob(['fixture']);
+  const modelSource = {
+    getModel: () => model,
+    subscribe() { return () => {}; },
+  };
+  const session = new TranslationSession(modelSource, () => engine);
+  await session.load('auto');
+  const sourceText = 'a'.repeat(3_000);
+  const translating = session.translate(sourceText);
+  await secondChunkEntered.promise;
+  const currentText = session.getState().result.text;
+
+  oldProgressCallback('古い区切りの遅延出力');
+  assert.equal(session.getState().result.text, currentText);
+
+  secondChunk.resolve({ text: '現在の出力', truncated: false });
+  await translating;
+  assert.equal(session.getState().result.status, 'complete');
+  assert.equal(session.getState().result.text.includes('古い区切り'), false);
+  await session.unload();
+});
+
+test('resumes after the failed chunk without regenerating completed chunks', async () => {
+  let attempts = 0;
+  let contextSize = 2_048;
+  const { session, calls } = fixture({
+    getRuntimeInfo() {
+      return {
+        backend: 'unknown',
+        contextSize,
+        requestedContextSize: 2_048,
+        actualContextSize: contextSize,
+        source: 'test runtime',
+      };
+    },
+    async complete(prompt, { onText }) {
+      attempts++;
+      if (attempts === 2) throw new Error('temporary inference failure');
+      const result = `section-${attempts}`;
+      onText(result);
+      return { text: result, finishReason: 'stop' };
+    },
+  });
+  const sourceText = `${'A'.repeat(1_000)}${'B'.repeat(1_000)}${'C'.repeat(1_000)}`;
+  await session.load('auto');
+  await assert.rejects(session.translate(sourceText), { code: 'translation-failed' });
+
+  assert.equal(session.getState().result.status, 'partial');
+  assert.equal(session.getState().result.partialReason, 'error');
+  assert.equal(session.getState().result.completedChunks, 1);
+  assert.equal(session.getState().result.canResume, true);
+  const previousTotalChunks = session.getState().result.totalChunks;
+  const firstPrompt = calls.completions[0][0];
+  await session.unload();
+  contextSize = 1_024;
+  await session.load('auto');
+
+  await session.resumeTranslation(sourceText, { sourceLanguage: 'ja', targetLanguage: 'en' });
+
+  assert.equal(session.getState().result.status, 'complete');
+  assert.equal(session.getState().result.completedChunks, session.getState().result.totalChunks);
+  assert(session.getState().result.totalChunks > previousTotalChunks);
+  assert.equal(calls.completions.filter(([prompt]) => prompt === firstPrompt).length, 1);
+  assert.equal(attempts, calls.completions.length);
+  await session.unload();
+});
+
+test('keeps a sentence newline as a separator outside the generated source chunks', async () => {
+  const { session, calls } = fixture({
+    async complete() { return { text: 'translation', finishReason: 'stop' }; },
+  });
+  await session.load('auto');
+  await session.translate(`最初。\n${'長'.repeat(1_000)}`);
+
+  assert(calls.completions.length > 1);
+  assert.match(session.getState().result.text, /^translation\ntranslation/);
+  await session.unload();
+});
+
+test('short truncated source chunks can be split safely before resuming', async t => {
+  for (const sourceText of ['ab', '日本', 'a😀']) {
+    await t.test(JSON.stringify(sourceText), async () => {
+      let attempts = 0;
+      const { session, calls } = fixture({
+        async complete(prompt, { onText }) {
+          attempts++;
+          if (attempts === 1) {
+            onText('incomplete');
+            return { text: 'incomplete', finishReason: 'length' };
+          }
+          const output = `piece-${attempts}`;
+          onText(output);
+          return { text: output, finishReason: 'stop' };
+        },
+      });
+      await session.load('auto');
+      await session.translate(sourceText);
+      assert.equal(session.getState().result.partialReason, 'truncated');
+      assert.equal(session.getState().result.canResume, true);
+      const originalCallCount = calls.completions.length;
+
+      await session.resumeTranslation(sourceText, { sourceLanguage: 'ja', targetLanguage: 'en' });
+
+      assert.equal(session.getState().result.status, 'complete');
+      assert.equal(calls.completions.length, originalCallCount + 2);
+      assert.equal(session.getState().result.completedChunks, 2);
+      await session.unload();
+    });
+  }
+});
+
+test('repeated truncated output keeps shrinking the failed source chunk', async () => {
+  let attempts = 0;
+  const { session } = fixture({
+    async complete(_prompt, { onText }) {
+      attempts++;
+      if (attempts <= 2) {
+        onText('incomplete');
+        return { text: 'incomplete', finishReason: 'length' };
+      }
+      const output = `piece-${attempts}`;
+      onText(output);
+      return { text: output, finishReason: 'stop' };
+    },
+  });
+  await session.load('auto');
+  await session.translate('abcd');
+  await session.resumeTranslation('abcd', { sourceLanguage: 'ja', targetLanguage: 'en' });
+  assert.equal(session.getState().result.partialReason, 'truncated');
+  assert.equal(session.getState().result.canResume, true);
+  await session.resumeTranslation('abcd', { sourceLanguage: 'ja', targetLanguage: 'en' });
+
+  assert.equal(session.getState().result.status, 'complete');
+  assert.equal(session.getState().result.completedChunks, session.getState().result.totalChunks);
+  await session.unload();
+});
+
+test('an empty successful chunk remains explicitly incomplete and resumable', async () => {
+  const { session } = fixture({
+    async complete() { return { text: '', finishReason: 'stop' }; },
+  });
+  await session.load('auto');
+  await session.translate('こんにちは');
+
+  assert.equal(session.getState().result.status, 'partial');
+  assert.equal(session.getState().result.partialReason, 'empty');
+  assert.equal(session.getState().result.canResume, true);
+  assert.equal(session.getState().result.text, '');
   await session.unload();
 });

@@ -45,10 +45,21 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
   const resultWarning = element('result-warning');
   const resultTiming = element('result-timing');
   const translationStatus = element('translation-status');
+  const resumeTranslationButton = element<HTMLButtonElement>('resume-translation');
+  const resumeHint = element('resume-hint');
+  const runtimeSummary = element('runtime-summary');
+  const requestedBackendDetail = element('requested-backend-detail');
+  const runtimeBackendDetail = element('runtime-backend-detail');
+  const runtimeWebGpuApi = element('runtime-webgpu-api');
+  const runtimeContextRow = element<HTMLDivElement>('runtime-context-row');
+  const runtimeContextDetail = element('runtime-context-detail');
+  const runtimeGpuLayersRow = element<HTMLDivElement>('runtime-gpu-layers-row');
+  const runtimeGpuLayersDetail = element('runtime-gpu-layers-detail');
   const errorPanel = element<HTMLDivElement>('translation-error');
   const errorText = element('translation-error-text');
   const openLogs = element<HTMLButtonElement>('show-logs');
   const preparationStatus = element('preparation-status');
+  const preparationHeading = element('preparation-heading');
   const preparationHint = element('preparation-hint');
   const preparationAction = element<HTMLButtonElement>('preparation-action');
   const preparationAbort = element<HTMLButtonElement>('preparation-abort');
@@ -65,12 +76,25 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
   let previousPreparationStatus = '';
   let previousOperation = '';
   let previousInputError = '';
+  let displayedOutput: string | undefined;
+  let outputTextNode: Text | undefined;
   const undoHistory = new InputUndoHistory();
   const copyFeedback = new AsyncFeedbackGuard();
 
   const clearCopyFeedback = () => {
     copyFeedback.invalidate();
     copyStatus.textContent = '';
+  };
+
+  const renderOutput = (text: string) => {
+    if (text === displayedOutput) return;
+    if (outputTextNode && displayedOutput !== undefined && text.startsWith(displayedOutput)) {
+      outputTextNode.appendData(text.slice(displayedOutput.length));
+    } else {
+      outputTextNode = document.createTextNode(text);
+      output.replaceChildren(outputTextNode);
+    }
+    displayedOutput = text;
   };
 
   const syncDirectionControls = () => {
@@ -161,6 +185,7 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
       preparationStatus.textContent = view.status;
       previousPreparationStatus = view.status;
     }
+    setTextIfChanged(preparationHeading, view.preparationHeading);
     preparationHint.textContent = view.preparationHint;
     preparationAction.hidden = !view.showPreparationAction;
     preparationAction.disabled = !view.showPreparationAction;
@@ -186,26 +211,42 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
     undoClear.hidden = !undoHistory.canUndo(input.value);
     undoClear.disabled = !undoHistory.canUndo(input.value) || !view.canEditInput;
     translate.disabled = !view.canTranslate;
+    translate.textContent = state.result?.status === 'partial'
+      ? '最初から翻訳'
+      : '翻訳する';
     translateHint.textContent = view.canTranslate
       ? 'Ctrl/Cmd + Enter でも翻訳できます。'
       : view.translateDisabledReason;
 
     const resultText = state.result?.text;
-    output.textContent = resultText?.trim() ? resultText : view.resultPlaceholder;
+    renderOutput(resultText?.trim() ? resultText : view.resultPlaceholder);
     output.setAttribute('aria-busy', String(isTranslating));
     output.lang = state.result?.direction.targetLanguage ?? direction.targetLanguage;
     setTextIfChanged(translationStatus, view.resultStatus || (!state.result ? state.notice ?? '' : ''));
     copy.disabled = !view.canCopyResult;
+    copy.textContent = view.copyResultLabel;
     resultWarning.hidden = !view.showTruncatedWarning;
-    setTextIfChanged(resultWarning, view.showTruncatedWarning
-      ? '出力上限に達したため、途中で切れている可能性があります。文章を分けて再度翻訳してください。'
-      : '');
+    setTextIfChanged(resultWarning, view.showTruncatedWarning ? view.truncatedWarningText : '');
     resultTiming.hidden = !view.showTiming;
     resultTiming.textContent = state.result ? `翻訳時間: ${state.result.elapsedMs} ms` : '';
+    resumeTranslationButton.hidden = !view.showResume;
+    resumeTranslationButton.disabled = !view.canResume;
+    setTextIfChanged(resumeHint, view.resumeHint);
+    resumeHint.hidden = !view.resumeHint;
     errorPanel.hidden = !view.showError;
     setTextIfChanged(errorText, view.errorText);
 
     runtimeBackend.disabled = !view.canChangeBackend;
+    setTextIfChanged(runtimeSummary, view.runtimeSummary);
+    setTextIfChanged(requestedBackendDetail, requestedBackend(runtimeBackend.value) === 'cpu'
+      ? 'CPU（WASM）'
+      : '自動選択（WebGPU 優先）');
+    setTextIfChanged(runtimeBackendDetail, view.runtimeBackendName);
+    setTextIfChanged(runtimeWebGpuApi, view.runtimeWebGpuApi);
+    runtimeContextRow.hidden = !view.showRuntimeContext;
+    setTextIfChanged(runtimeContextDetail, view.runtimeContext);
+    runtimeGpuLayersRow.hidden = !view.showRuntimeGpuLayers;
+    setTextIfChanged(runtimeGpuLayersDetail, view.runtimeGpuLayers);
     modelLoad.disabled = !view.canLoad;
     modelUnload.disabled = !view.canUnload;
     translationLogs.textContent = state.logs.join('\n') || '翻訳操作を行うとログを表示します。';
@@ -240,6 +281,7 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
     const target = targetLanguage.value as Language;
     changeDirection(changeTargetLanguage(direction, target));
   });
+  runtimeBackend.addEventListener('change', render);
   swap.addEventListener('click', () => changeDirection(swapDirection(direction)));
   insertExample.addEventListener('click', () => {
     if (input.value || !describeTranslation(session.getState(), input.value, direction, downloadUI.downloader.getState()).canEditInput) return;
@@ -317,6 +359,13 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
         }
       }
     })();
+  });
+  resumeTranslationButton.addEventListener('click', () => {
+    const view = describeTranslation(session.getState(), input.value, direction, downloadUI.downloader.getState());
+    if (!view.canResume) return;
+    const operation = session.resumeTranslation(input.value, direction);
+    translationStatus.focus();
+    void operation.catch(() => {});
   });
   openLogs.addEventListener('click', () => {
     diagnostics.open = true;

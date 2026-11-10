@@ -11,6 +11,8 @@ export class FakeElement {
     this.attributes = new Map();
     this.listeners = new Map();
     this.lastSelection = undefined;
+    this.children = [];
+    this.replaceChildrenCount = 0;
   }
 
   addEventListener(type, listener) {
@@ -51,12 +53,40 @@ export class FakeElement {
   setSelectionRange(start, end) {
     this.lastSelection = { start, end };
   }
+
+  replaceChildren(...children) {
+    this.children = children;
+    this.replaceChildrenCount++;
+    this.textContent = children.map(child => child.textContent ?? '').join('');
+    for (const child of children) {
+      child.parentElement = this;
+    }
+  }
+}
+
+class FakeTextNode {
+  constructor(data) {
+    this.data = data;
+    this.parentElement = undefined;
+  }
+
+  get textContent() {
+    return this.data;
+  }
+
+  appendData(data) {
+    this.data += data;
+    if (this.parentElement) this.parentElement.textContent += data;
+  }
 }
 
 export function createFakeDocument(ids) {
   const elements = new Map(ids.map(id => [id, new FakeElement(id)]));
   return {
     activeElement: undefined,
+    createTextNode(data) {
+      return new FakeTextNode(data);
+    },
     getElementById(id) {
       if (!elements.has(id)) elements.set(id, new FakeElement(id));
       return elements.get(id);

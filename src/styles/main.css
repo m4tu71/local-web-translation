@@ -474,6 +474,51 @@ input:disabled {
   text-align: right;
 }
 
+.resume-actions {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+}
+
+.resume-actions .muted-copy {
+  margin: 0;
+}
+
+.runtime-summary {
+  margin: 0.65rem 0 0;
+  color: #43546a;
+  font-size: 0.85rem;
+}
+
+.runtime-details {
+  display: grid;
+  gap: 0.4rem;
+  margin: 1rem 0;
+}
+
+.runtime-details > div {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.75fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  padding-block: 0.35rem;
+  border-bottom: 1px solid #e5eaf0;
+}
+
+.runtime-details > div[hidden] {
+  display: none;
+}
+
+.runtime-details dt {
+  color: #526176;
+}
+
+.runtime-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .inline-message {
   min-height: 0;
   margin: 0;
@@ -504,6 +549,7 @@ input:disabled {
 }
 
 .translation-status,
+.runtime-summary,
 .copy-status,
 .result-timing,
 .warning-message {
@@ -807,6 +853,11 @@ pre {
   .translate-hint {
     max-width: none;
     text-align: left;
+  }
+
+  .runtime-details > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
   }
 
   .result-heading-row {
