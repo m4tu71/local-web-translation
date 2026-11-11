@@ -22,14 +22,14 @@
 
       <section id="preparation-banner" class="preparation-banner" aria-labelledby="preparation-heading">
         <div class="preparation-message">
-          <p class="eyebrow">翻訳の状態</p>
+          <p id="preparation-eyebrow" class="eyebrow">翻訳の状態</p>
           <h2 id="preparation-heading">モデルと入力を確認しています</h2>
           <p id="preparation-status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
             ブラウザー内のモデルを確認しています。
           </p>
           <p id="preparation-hint" class="muted-copy"></p>
         </div>
-        <div class="preparation-actions">
+        <div id="preparation-actions" class="preparation-actions">
           <button id="preparation-action" type="button" class="button-primary" disabled>確認中…</button>
           <button id="preparation-abort" type="button" hidden>処理を中止</button>
         </div>
@@ -48,7 +48,7 @@
           <div class="language-bar" aria-label="翻訳方向">
             <div class="language-field">
               <label for="source-language">翻訳元</label>
-              <select id="source-language" aria-describedby="language-help">
+              <select id="source-language">
                 <option value="ja">日本語</option>
                 <option value="en">English</option>
               </select>
@@ -59,14 +59,13 @@
             </button>
             <div class="language-field">
               <label for="target-language">翻訳先</label>
-              <select id="target-language" aria-describedby="language-help">
+              <select id="target-language">
                 <option value="en">English</option>
                 <option value="ja">日本語</option>
               </select>
             </div>
-            <p id="language-help" class="language-help">日本語と英語の間で翻訳します。方向を変えても入力文は残ります。</p>
             <p id="preferences-status" class="preferences-status" role="status" aria-live="polite" aria-atomic="true"></p>
-            <p class="language-help preferences-note">翻訳方向と実行設定のみ次回も利用します。入力文と翻訳結果は保存しません。</p>
+            <p class="language-help preferences-note">入力文と翻訳結果は保存しません。</p>
           </div>
 
           <div class="translation-grid">
@@ -86,10 +85,9 @@
                 spellcheck="true"
               ></textarea>
               <div class="input-meta">
-                <p id="input-help" class="muted-copy">最大 10,000 文字。入力文はこのページ内だけで扱い、保存しません。</p>
+                <p id="input-help" class="muted-copy">最大 10,000 文字。</p>
                 <p id="input-count" class="character-count">0 / 10000</p>
               </div>
-              <p class="muted-copy long-translation-note">長い文章は自動で区切って翻訳します。文脈が分かれる場合があります。</p>
               <p id="input-message" class="inline-message" aria-live="polite"></p>
               <div class="pane-actions input-actions">
                 <div class="secondary-actions">
@@ -259,6 +257,15 @@
             </dl>
             <p class="muted-copy">WebGPU API の有無は、実際に GPU で翻訳したことを示しません。</p>
             <p class="muted-copy">ロードを解除しても、選択した保存先のモデルは削除しません。</p>
+          </section>
+
+          <section class="settings-section" aria-labelledby="preference-saving-heading">
+            <h2 id="preference-saving-heading">設定の保存</h2>
+            <label class="checkbox-label" for="save-translation-preferences">
+              <input id="save-translation-preferences" type="checkbox" checked aria-describedby="preference-saving-note" />
+              翻訳方向と実行設定を保存する
+            </label>
+            <p id="preference-saving-note" class="muted-copy">オフにすると保存済み設定を削除し、次回起動時は初期設定に戻ります。</p>
           </section>
 
           <section class="settings-section danger-zone" aria-labelledby="delete-heading">

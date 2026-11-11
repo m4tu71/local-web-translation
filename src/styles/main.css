@@ -192,6 +192,20 @@ a:hover {
   gap: 0.625rem;
 }
 
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.checkbox-label input[type='checkbox'] {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+}
+
 button {
   display: inline-flex;
   min-height: 2.75rem;
