@@ -171,8 +171,11 @@ function isSafeStoredManifest(record, cacheName) {
     } catch {
       return false;
     }
-    if (url.origin !== SCOPE_URL.origin || !url.pathname.startsWith(SCOPE_URL.pathname) || url.search || url.hash ||
+    if (!asset.url.startsWith(SCOPE_URL.pathname) || asset.url.startsWith('//') ||
+        url.origin !== SCOPE_URL.origin || url.pathname !== asset.url || !url.pathname.startsWith(SCOPE_URL.pathname) ||
+        url.search || url.hash ||
         seenUrls.has(url.href) || /\.(?:gguf|safetensors|pt|pth|bin|onnx|tgz)$/i.test(url.pathname) ||
+        !isAllowedStoredAssetPath(url.pathname) ||
         (asset.hashed && !isHashNamedAssetPath(url.pathname))) {
       return false;
     }
@@ -180,6 +183,11 @@ function isSafeStoredManifest(record, cacheName) {
   }
 
   return seenUrls.has(INDEX_URL) && seenUrls.has(new URL('THIRD_PARTY_NOTICES.txt', SCOPE_URL).href);
+}
+
+function isAllowedStoredAssetPath(path) {
+  if (path === INDEX_PATH || path === new URL('THIRD_PARTY_NOTICES.txt', SCOPE_URL).pathname) return true;
+  return /\.(?:js|css|wasm|svg|png|jpe?g|webp|ico|woff2?)$/i.test(path);
 }
 
 async function getCurrentCacheStatus() {
