@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { InferenceController } from '../src/inference/engine.ts';
 import { TranslationSession } from '../src/poc/translation-session.ts';
+import { DEFAULT_TRANSLATION_PREFERENCES } from '../src/storage/translation-preferences.ts';
 import { mountTranslation } from '../src/ui/translation.ts';
 import {
   AsyncFeedbackGuard,
@@ -20,8 +21,9 @@ const TRANSLATION_IDS = [
   'resume-translation', 'resume-hint', 'runtime-summary', 'requested-backend-detail',
   'runtime-backend-detail', 'runtime-webgpu-api', 'runtime-context-row', 'runtime-context-detail',
   'runtime-gpu-layers-row', 'runtime-gpu-layers-detail',
-  'translation-status', 'translation-error', 'translation-error-text', 'show-logs', 'preparation-heading', 'preparation-status',
-  'preparation-hint', 'preparation-action', 'preparation-abort', 'runtime-backend', 'model-settings',
+  'translation-status', 'preferences-status', 'translation-error', 'translation-error-text', 'show-logs', 'preparation-heading', 'preparation-status',
+  'preparation-eyebrow', 'preparation-hint', 'preparation-actions', 'preparation-action', 'preparation-abort', 'runtime-backend', 'model-settings',
+  'save-translation-preferences',
   'model-download', 'model-load', 'model-unload', 'diagnostics', 'translation-logs', 'model-logs',
 ];
 
@@ -163,6 +165,31 @@ function createDownloadUI(initialState = modelState()) {
   };
 }
 
+function createPreferenceStore(initialPreferences = DEFAULT_TRANSLATION_PREFERENCES) {
+  let preferences = { ...initialPreferences };
+  let enabled = true;
+  const calls = { loads: 0, saves: [], disables: 0 };
+  return {
+    calls,
+    load() {
+      calls.loads++;
+      return { enabled, preferences: { ...preferences } };
+    },
+    save(nextPreferences) {
+      calls.saves.push({ ...nextPreferences });
+      preferences = { ...nextPreferences };
+      enabled = true;
+      return true;
+    },
+    disable() {
+      calls.disables++;
+      preferences = { ...DEFAULT_TRANSLATION_PREFERENCES };
+      enabled = false;
+      return true;
+    },
+  };
+}
+
 async function waitFor(condition, description, attempts = 1500) {
   for (let index = 0; index < attempts; index++) {
     if (condition()) return;
@@ -176,6 +203,210 @@ test('language selectors always preserve opposite directions and swap only the l
   assert.deepEqual(changeSourceLanguage(DEFAULT_DIRECTION, 'en'), { sourceLanguage: 'en', targetLanguage: 'ja' });
   assert.deepEqual(changeTargetLanguage(DEFAULT_DIRECTION, 'ja'), { sourceLanguage: 'en', targetLanguage: 'ja' });
   assert.deepEqual(swapDirection(DEFAULT_DIRECTION), { sourceLanguage: 'en', targetLanguage: 'ja' });
+});
+
+test('preferences restore on a later mount without restoring translation data or starting work', async () => {
+  const preferenceStore = createPreferenceStore();
+  const firstDocument = createFakeDocument(TRANSLATION_IDS);
+  const firstSession = createSession();
+
+  await withFakeDom(firstDocument, async () => {
+    mountTranslation(firstSession, createDownloadUI(), preferenceStore);
+    const sourceLanguage = firstDocument.getElementById('source-language');
+    sourceLanguage.value = 'en';
+    sourceLanguage.dispatch('change');
+    const backend = firstDocument.getElementById('runtime-backend');
+    backend.value = 'cpu';
+    backend.dispatch('change');
+
+    const input = firstDocument.getElementById('translation-input');
+    input.value = 'Private text that should not persist';
+    input.dispatch('input');
+    assert.equal(preferenceStore.calls.saves.length, 2);
+    firstDocument.getElementById('translation-form').dispatch('submit');
+    assert.deepEqual(firstSession.calls.translations, [{
+      text: input.value,
+      direction: { sourceLanguage: 'en', targetLanguage: 'ja' },
+    }]);
+    assert.equal(firstDocument.getElementById('translation-output').textContent, '翻訳結果');
+  });
+
+  const nextDocument = createFakeDocument(TRANSLATION_IDS);
+  const nextSession = createSession(sessionState({
+    engine: { phase: 'idle', modelLoaded: false },
+    modelInUse: false,
+  }));
+
+  await withFakeDom(nextDocument, async () => {
+    mountTranslation(nextSession, createDownloadUI(), preferenceStore);
+    assert.equal(nextDocument.getElementById('source-language').value, 'en');
+    assert.equal(nextDocument.getElementById('target-language').value, 'ja');
+    assert.equal(nextDocument.getElementById('runtime-backend').value, 'cpu');
+    assert.equal(nextDocument.getElementById('translation-input').value, '');
+    assert.notEqual(nextDocument.getElementById('translation-output').textContent, '翻訳結果');
+    assert.deepEqual(nextSession.calls.loads, []);
+    assert.deepEqual(nextSession.calls.translations, []);
+  });
+
+  assert.equal(preferenceStore.calls.loads, 2);
+  assert.equal(preferenceStore.calls.saves.length, 2);
+});
+
+test('target selection and swapping save the new translation direction', async () => {
+  const document = createFakeDocument(TRANSLATION_IDS);
+  const preferenceStore = createPreferenceStore();
+
+  await withFakeDom(document, async () => {
+    mountTranslation(createSession(), createDownloadUI(), preferenceStore);
+    const targetLanguage = document.getElementById('target-language');
+    targetLanguage.value = 'ja';
+    targetLanguage.dispatch('change');
+    document.getElementById('swap-languages').dispatch('click');
+
+    assert.deepEqual(preferenceStore.calls.saves, [
+      { sourceLanguage: 'en', targetLanguage: 'ja', requestedBackend: 'auto' },
+      { sourceLanguage: 'ja', targetLanguage: 'en', requestedBackend: 'auto' },
+    ]);
+  });
+});
+
+test('a loaded model with valid text shows only model-loaded and translatable state', async () => {
+  const document = createFakeDocument(TRANSLATION_IDS);
+  document.getElementById('translation-input').value = 'Hello';
+
+  await withFakeDom(document, async () => {
+    mountTranslation(createSession(), createDownloadUI());
+
+    assert.equal(document.getElementById('preparation-heading').textContent, '翻訳できます');
+    assert.equal(document.getElementById('preparation-status').textContent, 'モデルはロード済みです。');
+    assert.equal(document.getElementById('preparation-eyebrow').hidden, true);
+    assert.equal(document.getElementById('preparation-hint').hidden, true);
+    assert.equal(document.getElementById('preparation-actions').hidden, true);
+    assert.equal(document.getElementById('preparation-action').hidden, true);
+    assert.equal(document.getElementById('preparation-abort').hidden, true);
+  });
+});
+
+test('unavailable saved preferences show a warning and apply default values', async () => {
+  const document = createFakeDocument(TRANSLATION_IDS);
+  const preferenceStore = {
+    load: () => ({
+      preferences: DEFAULT_TRANSLATION_PREFERENCES,
+      notice: 'unavailable',
+    }),
+    save: () => true,
+  };
+
+  await withFakeDom(document, async () => {
+    mountTranslation(createSession(), createDownloadUI(), preferenceStore);
+    assert.equal(document.getElementById('source-language').value, 'ja');
+    assert.equal(document.getElementById('target-language').value, 'en');
+    assert.equal(document.getElementById('runtime-backend').value, 'auto');
+    assert.match(document.getElementById('preferences-status').textContent, /設定を読み込めません/);
+    assert.equal(document.getElementById('translate-button').disabled, true);
+  });
+});
+
+test('input edits do not save preferences and a failed save does not block translation', async () => {
+  const document = createFakeDocument(TRANSLATION_IDS);
+  const calls = { saves: 0 };
+  const preferenceStore = {
+    load: () => ({ preferences: DEFAULT_TRANSLATION_PREFERENCES }),
+    save() {
+      calls.saves++;
+      return false;
+    },
+  };
+  const session = createSession();
+
+  await withFakeDom(document, async () => {
+    mountTranslation(session, createDownloadUI(), preferenceStore);
+    const input = document.getElementById('translation-input');
+    input.value = 'A translation request';
+    input.dispatch('input');
+    assert.equal(calls.saves, 0);
+
+    const backend = document.getElementById('runtime-backend');
+    backend.value = 'cpu';
+    backend.dispatch('change');
+    assert.equal(calls.saves, 1);
+    assert.equal(input.value, 'A translation request');
+    assert.match(document.getElementById('preferences-status').textContent, /設定を保存できません/);
+
+    document.getElementById('translation-form').dispatch('submit');
+    assert.equal(session.calls.translations.length, 1);
+    assert.equal(input.value, 'A translation request');
+    assert.equal(document.getElementById('translation-output').textContent, '翻訳結果');
+  });
+});
+
+test('preference saving defaults on, can be disabled across reloads, and resumes saving when reenabled', async () => {
+  const preferenceStore = createPreferenceStore();
+  const firstDocument = createFakeDocument(TRANSLATION_IDS);
+
+  await withFakeDom(firstDocument, async () => {
+    mountTranslation(createSession(), createDownloadUI(), preferenceStore);
+    assert.equal(firstDocument.getElementById('save-translation-preferences').checked, true);
+
+    firstDocument.getElementById('source-language').value = 'en';
+    firstDocument.getElementById('source-language').dispatch('change');
+    firstDocument.getElementById('runtime-backend').value = 'cpu';
+    firstDocument.getElementById('runtime-backend').dispatch('change');
+    assert.equal(preferenceStore.calls.saves.length, 2);
+
+    const toggle = firstDocument.getElementById('save-translation-preferences');
+    toggle.checked = false;
+    toggle.dispatch('change');
+    assert.equal(preferenceStore.calls.disables, 1);
+    assert.equal(firstDocument.getElementById('source-language').value, 'en');
+    assert.equal(firstDocument.getElementById('runtime-backend').value, 'cpu');
+
+    firstDocument.getElementById('source-language').value = 'ja';
+    firstDocument.getElementById('source-language').dispatch('change');
+    firstDocument.getElementById('runtime-backend').value = 'auto';
+    firstDocument.getElementById('runtime-backend').dispatch('change');
+    assert.equal(preferenceStore.calls.saves.length, 2);
+  });
+
+  const nextDocument = createFakeDocument(TRANSLATION_IDS);
+  await withFakeDom(nextDocument, async () => {
+    mountTranslation(createSession(), createDownloadUI(), preferenceStore);
+    assert.equal(nextDocument.getElementById('save-translation-preferences').checked, false);
+    assert.equal(nextDocument.getElementById('source-language').value, 'ja');
+    assert.equal(nextDocument.getElementById('target-language').value, 'en');
+    assert.equal(nextDocument.getElementById('runtime-backend').value, 'auto');
+
+    nextDocument.getElementById('source-language').value = 'en';
+    nextDocument.getElementById('source-language').dispatch('change');
+    assert.equal(preferenceStore.calls.saves.length, 2);
+
+    const toggle = nextDocument.getElementById('save-translation-preferences');
+    toggle.checked = true;
+    toggle.dispatch('change');
+    assert.equal(preferenceStore.calls.saves.length, 3);
+    assert.deepEqual(preferenceStore.calls.saves.at(-1), {
+      sourceLanguage: 'en', targetLanguage: 'ja', requestedBackend: 'auto',
+    });
+  });
+});
+
+test('failed disabling keeps the current page usable and explains that off may not survive reload', async () => {
+  const document = createFakeDocument(TRANSLATION_IDS);
+  const preferenceStore = {
+    load: () => ({ enabled: true, preferences: { ...DEFAULT_TRANSLATION_PREFERENCES } }),
+    save: () => false,
+    disable: () => false,
+  };
+
+  await withFakeDom(document, async () => {
+    mountTranslation(createSession(), createDownloadUI(), preferenceStore);
+    const toggle = document.getElementById('save-translation-preferences');
+    toggle.checked = false;
+    toggle.dispatch('change');
+    assert.match(document.getElementById('preferences-status').textContent, /このページでは保存しません/);
+    assert.match(document.getElementById('preferences-status').textContent, /次回起動時/);
+    assert.equal(document.getElementById('source-language').value, 'ja');
+  });
 });
 
 test('streaming output appends without replacing the result node and keeps copying disabled', async () => {
@@ -284,7 +515,11 @@ test('runtime details show confirmed CPU information and explicit engine context
   document.getElementById('runtime-backend').value = 'cpu';
 
   await withFakeDom(document, async () => {
-    mountTranslation(session, createDownloadUI());
+    mountTranslation(session, createDownloadUI(), createPreferenceStore({
+      sourceLanguage: 'ja',
+      targetLanguage: 'en',
+      requestedBackend: 'cpu',
+    }));
     assert.equal(document.getElementById('runtime-summary').textContent, '実際の実行環境: CPU（WASM）');
     assert.equal(document.getElementById('requested-backend-detail').textContent, 'CPU（WASM）');
     assert.equal(document.getElementById('runtime-backend-detail').textContent, 'CPU（WASM）');

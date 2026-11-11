@@ -5,7 +5,7 @@
 
 ## workflow
 
-`.github/workflows/ci.yml` は pull request の main 向け変更と main への push で実行する。Node.js は `.node-version`、npm は `10.9.10` に合わせ、`npm ci`、`npm test`、`npm run build` を実行する。ビルド後の検査で `dist/` のエントリー、第三者ライセンス表示、Pages のベースパス、実際に参照するアセット、インストール済み wllama 通常版・compat 版の WASM ハッシュを確認する。モデル重みやパッケージアーカイブが `dist/` に混入していないことも確認する。
+`.github/workflows/ci.yml` は pull request の main 向け変更と main への push で実行する。Node.js は `.node-version`、npm は `10.9.10` に合わせ、`npm ci`、`npm test`、`npm run build` を実行する。build test は Vite plugin が生成する build ID と inline precache manifest を確認する。さらに `node scripts/verify-pages-build.mjs dist` で、`dist/` のエントリー、第三者ライセンス表示、Pages のベースパス、manifest に列挙したアセットと SHA-256、インストール済み wllama 通常版・compat 版の WASM ハッシュを確認する。モデル重みやパッケージアーカイブが `dist/` や offline manifest に混入していないことも確認する。
 
 `.github/workflows/deploy-pages.yml` は main への push または main 上での手動実行でビルドし、検査済みの `dist/` だけを GitHub Pages artifact として公開する。pull request から公開ジョブは実行しない。deploy job は build の完了を待ち、Pages 書き込みと OIDC token の権限だけを持つ。workflow 内の Actions は公式リポジトリで確認した commit SHA に固定している。
 
@@ -35,7 +35,9 @@ Vite の `base` は `/local-web-translation/` のままにする。ユーザー�
 - Firefox 等の compat 経路を対象とする場合は同じ操作を確認する。CI は実ブラウザーの API 対応や推論成功を保証しない。
 - ブラウザー開発者ツールでエラー・404・CORS の失敗がないことを確認する。
 
-workflow は COOP / COEP ヘッダーを設定しない。そのためクロスオリジン分離を要求するマルチスレッド WASM 経路が利用できるとは限らない。Service Worker やアプリ全体のオフライン化もこの構成に含まない。モデルを OPFS に保存していても、アプリや推論エンジンの配信にはネットワーク接続が必要な場合がある。
+workflow は COOP / COEP ヘッダーを設定しない。そのためクロスオリジン分離を要求するマルチスレッド WASM 経路が利用できるとは限らない。Service Worker は `/local-web-translation/` の同一 scope に登録し、現在の build の HTML、JavaScript、CSS、通常版と compat 版の WASM、Worker 関連資産、第三者ライセンス表示を build ID 付き manifest から CacheStorage へ保存する。モデルはこのキャッシュに含めず OPFS で管理する。オフライン利用の準備とモデルの有効性、更新・復旧の仕様は[オフライン利用設計](offline-and-preferences.md)を参照する。
+
+この workflow の自動検証は Service Worker の実ブラウザー登録、CacheStorage、ネットワーク遮断下の起動や実モデル推論を確認しない。利用者の実ブラウザーによる手動確認が完了するまでは、オフライン起動とオフライン翻訳は未確認として扱う。
 
 ## 参照
 

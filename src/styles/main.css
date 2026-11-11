@@ -192,6 +192,20 @@ a:hover {
   gap: 0.625rem;
 }
 
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.checkbox-label input[type='checkbox'] {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+}
+
 button {
   display: inline-flex;
   min-height: 2.75rem;
@@ -376,6 +390,17 @@ input:disabled {
   grid-column: 1 / -1;
   margin: -0.35rem 0 0;
   font-size: 0.85rem;
+}
+
+.preferences-status,
+.preferences-note {
+  grid-column: 1 / -1;
+  margin: -0.55rem 0 0;
+  font-size: 0.85rem;
+}
+
+.preferences-status:empty {
+  display: none;
 }
 
 .translation-grid {
@@ -604,6 +629,36 @@ input:disabled {
   border: 1px solid #d8e0e9;
   border-radius: 0.8rem;
   background: #fff;
+}
+
+.offline-summary {
+  margin: 1rem 0 0;
+  color: #526176;
+  font-size: 0.9rem;
+}
+
+.offline-content {
+  grid-template-columns: minmax(0, 1.5fr) minmax(16rem, 1fr);
+}
+
+.offline-status {
+  margin-bottom: 0.55rem;
+  color: #34465d;
+  font-weight: 600;
+}
+
+.offline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+#offline-update {
+  margin-top: 0.85rem;
+}
+
+#offline-error {
+  margin-top: 0.75rem;
 }
 
 .settings-panel > summary {

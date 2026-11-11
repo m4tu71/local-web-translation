@@ -133,16 +133,16 @@ Hugging Face からブラウザが直接取得して OPFS に保存する。
 - WASM / Worker は依存から取り込み済み。WebGPU と WASM スレッド数はモデル操作の実装時に定義する。
 - マルチスレッド WASM が要求するクロスオリジン分離は、GitHub Pages での成立条件も検証する。
   開発サーバーだけにヘッダーを追加して公開環境でも動くとは判断しない。
-- Service Worker は未導入。OPFS にモデルを保存しても、アプリ資材の取得やオフライン起動を保証しない。アプリ全体のオフライン対応は別途設計・検証する。
+- production build で Service Worker と build ID 付きアプリ資産 manifest を生成する。開発サーバーではオフライン準備を利用できない。オフライン起動には同一 build の CacheStorage 資産と、期限内で検証済みの OPFS モデルの両方が必要。アプリの実ブラウザー登録、ネットワーク遮断下での起動・翻訳はまだ手動確認していない。詳細は[オフライン利用設計](offline-and-preferences.md)を参照。
 - GitHub Actions CI / Pages workflow を追加済み。2026-11-08、PR #2 の commit `897638a` で CI の成功を確認
   （[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この確認は当該 commit に限る。公開先と公開後の確認記録は[GitHub Pages 文書](github-pages.md)を参照。デプロイ workflow の個別実行 ID は記録していない。
 
 ## 環境構築後の完了条件
 
 1. npm ci で依存関係を復元できる。
-2. npm run typecheck と npm run build が成功する。
-3. 開発サーバーと preview のサブパスで最小ページを表示でき、アセットが 404 にならない。
-4. dist/ にモデル重みが含まれず、推論 API やバックエンドを必要としない。
+2. npm run typecheck と npm run build が成功し、`node scripts/verify-pages-build.mjs dist` が成功する。
+3. 開発サーバーと preview のサブパスでページとアセットが配信でき、開発サーバーでは Service Worker 準備を使えないことを確認する。
+4. `dist/` にモデル重みが含まれず、アプリ資産を列挙する Service Worker は現行 build の same-origin 資産を参照する。
 
 この完了条件はビルド環境の確認であり、モデルのロード・翻訳成功を意味しない。
 

@@ -122,8 +122,7 @@ export function describeTranslation(
   } else if (loadedAndReady && !hasText) {
     status = state.notice ?? 'モデルはロード済みです。文章を入力してください。';
   } else if (loadedAndReady && canTranslate) {
-    status = state.notice ??
-      `${LANGUAGE_NAMES[direction.sourceLanguage]}から${LANGUAGE_NAMES[direction.targetLanguage]}へ翻訳できます。`;
+    status = 'モデルはロード済みです。';
   } else if (modelPhase === 'error') {
     status = downloadView.status;
   } else if (!state.hasModelFile) {
@@ -156,7 +155,7 @@ export function describeTranslation(
       ? '入力欄の案内に従って文章を修正してください。'
       : !hasText
         ? 'モデルはロード済みです。翻訳する文章を入力してください。'
-        : '入力文は端末内で処理され、このページには保存されません。';
+        : '';
   } else if (state.error && state.hasModelFile) {
     preparationHint = 'モデルをロードできませんでした。設定を確認して再ロードしてください。';
   } else if (!state.hasModelFile) {
@@ -271,6 +270,7 @@ export function describeTranslation(
     preparationHeading,
     status,
     preparationHint,
+    compactReadyState: canTranslate && loadedAndReady,
     preparationAction,
     preparationActionLabel,
     showPreparationAction: Boolean(preparationAction),

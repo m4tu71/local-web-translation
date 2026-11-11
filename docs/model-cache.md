@@ -18,7 +18,7 @@
 
 複数タブからの読み書きは [Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API) で調整する。モデルをロードして使うタブは共有ロックを保持し、削除・置換は排他ロックを使うため、他タブが利用中のモデルは使用終了まで削除できない。ロックは同一オリジン内のアプリ操作を調整するもので、ブラウザーや OS が領域を消去することまでは防がない。
 
-OPFS は [File System API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) のサイト専用領域を使う。永続性やアプリ本体のオフライン配信を保証しない。
+OPFS は [File System API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) のサイト専用領域を使う。永続性やアプリ本体の配信は保証しない。アプリ資産のオフライン保存は別の Service Worker / CacheStorage が担当する。どちらの領域もブラウザーや OS が消去する可能性がある。
 
 ## 保存先を選ぶ
 
@@ -61,4 +61,4 @@ OPFS は [File System API](https://developer.mozilla.org/en-US/docs/Web/API/File
 6. 2つのタブで同じアプリを開く。一方がモデルをロード中に他方から削除しようとした場合、使用中のモデルが削除されず、ロード解除後に削除できることを確認する。
 7. OPFS 非対応または利用不可の環境で、メモリ保存を選択して従来の取得・ロード経路を利用できることを確認する。
 
-上記の追加確認項目は未検証。利用者報告の範囲を超えて、対応ブラウザー全般の動作や異常系を保証するものではない。モデルキャッシュはアプリのオフライン化を意味しない。アプリ本体や wllama の WASM / Worker の配信にはネットワークが必要な場合がある。
+上記の追加確認項目は未検証。利用者報告の範囲を超えて、対応ブラウザー全般の動作や異常系を保証するものではない。モデルの OPFS 保存だけではアプリをオフラインで開けない。アプリ資産は別途 Service Worker に明示的に保存する必要があり、オフライン準備の条件は[オフライン利用設計](offline-and-preferences.md)を参照する。アプリとモデルをそろえた実ブラウザーでのオフライン起動・推論は未確認。

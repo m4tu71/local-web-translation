@@ -1,9 +1,13 @@
 import type { TranslationSession } from '../poc/translation-session.ts';
+import {
+  createTranslationPreferenceStore,
+  DEFAULT_TRANSLATION_PREFERENCES,
+  type TranslationPreferenceStore,
+} from '../storage/translation-preferences.ts';
 import { MAX_INPUT_CHARACTERS, type Language, type TranslationDirection } from '../translation/input.ts';
 import type { ModelDownloadControls } from './model-download.ts';
 import {
   AsyncFeedbackGuard,
-  DEFAULT_DIRECTION,
   InputUndoHistory,
   changeSourceLanguage,
   changeTargetLanguage,
@@ -25,7 +29,23 @@ function setTextIfChanged(element: HTMLElement, text: string): void {
   if (element.textContent !== text) element.textContent = text;
 }
 
-export function mountTranslation(session: TranslationSession, downloadUI: ModelDownloadControls): void {
+function preferenceLoadMessage(notice?: 'invalid' | 'unavailable'): string {
+  if (notice === 'invalid') return '保存した設定を利用できません。既定の設定で続行します。';
+  if (notice === 'unavailable') return '設定を読み込めません。既定の設定で続行します。';
+  return '';
+}
+
+export function mountTranslation(
+  session: TranslationSession,
+  downloadUI: ModelDownloadControls,
+  injectedPreferenceStore?: TranslationPreferenceStore,
+): void {
+  const preferenceStore = injectedPreferenceStore ?? createTranslationPreferenceStore();
+  const loadedPreferences = preferenceStore.load();
+  let persistenceEnabled = loadedPreferences.enabled !== false;
+  let requestedBackendPreference = persistenceEnabled
+    ? loadedPreferences.preferences.requestedBackend
+    : DEFAULT_TRANSLATION_PREFERENCES.requestedBackend;
   const form = element<HTMLFormElement>('translation-form');
   const sourceLanguage = element<HTMLSelectElement>('source-language');
   const targetLanguage = element<HTMLSelectElement>('target-language');
@@ -33,6 +53,8 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
   const input = element<HTMLTextAreaElement>('translation-input');
   const inputCount = element('input-count');
   const inputMessage = element('input-message');
+  const preferencesStatus = document.getElementById('preferences-status');
+  const savePreferencesToggle = element<HTMLInputElement>('save-translation-preferences');
   const exampleHint = element('example-hint');
   const insertExample = element<HTMLButtonElement>('insert-example');
   const clearInput = element<HTMLButtonElement>('clear-input');
@@ -58,11 +80,13 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
   const errorPanel = element<HTMLDivElement>('translation-error');
   const errorText = element('translation-error-text');
   const openLogs = element<HTMLButtonElement>('show-logs');
+  const preparationEyebrow = element('preparation-eyebrow');
   const preparationStatus = element('preparation-status');
   const preparationHeading = element('preparation-heading');
   const preparationHint = element('preparation-hint');
   const preparationAction = element<HTMLButtonElement>('preparation-action');
   const preparationAbort = element<HTMLButtonElement>('preparation-abort');
+  const preparationActions = element('preparation-actions');
   const modelStatus = element('model-status');
   const runtimeBackend = element<HTMLSelectElement>('runtime-backend');
   const modelSettings = element<HTMLDetailsElement>('model-settings');
@@ -72,7 +96,18 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
   const diagnostics = element<HTMLDetailsElement>('diagnostics');
   const translationLogs = element('translation-logs');
   const modelLogs = element('model-logs');
-  let direction: TranslationDirection = DEFAULT_DIRECTION;
+  let direction: TranslationDirection = Object.freeze({
+    sourceLanguage: persistenceEnabled
+      ? loadedPreferences.preferences.sourceLanguage
+      : DEFAULT_TRANSLATION_PREFERENCES.sourceLanguage,
+    targetLanguage: persistenceEnabled
+      ? loadedPreferences.preferences.targetLanguage
+      : DEFAULT_TRANSLATION_PREFERENCES.targetLanguage,
+  });
+  savePreferencesToggle.checked = persistenceEnabled;
+  if (preferencesStatus) {
+    preferencesStatus.textContent = preferenceLoadMessage(loadedPreferences.notice);
+  }
   let previousPreparationStatus = '';
   let previousOperation = '';
   let previousInputError = '';
@@ -103,6 +138,22 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
     input.lang = direction.sourceLanguage;
   };
 
+  const setPreferencesNotice = (message: string) => {
+    if (preferencesStatus) setTextIfChanged(preferencesStatus, message);
+  };
+
+  const savePreferences = () => {
+    if (!persistenceEnabled) return;
+    const saved = preferenceStore.save({
+      sourceLanguage: direction.sourceLanguage,
+      targetLanguage: direction.targetLanguage,
+      requestedBackend: requestedBackendPreference,
+    });
+    setPreferencesNotice(saved
+      ? ''
+      : '設定を保存できません。このページでは変更を利用できます。');
+  };
+
   const refreshInput = (recordEdit: boolean) => {
     if (recordEdit) undoHistory.recordEdit(input.value);
     inputCount.textContent = `${input.value.length} / ${MAX_INPUT_CHARACTERS}`;
@@ -122,6 +173,7 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
         nextDirection.targetLanguage === direction.targetLanguage) return;
     direction = nextDirection;
     syncDirectionControls();
+    savePreferences();
     session.clearResult();
     clearCopyFeedback();
     translationStatus.textContent = '';
@@ -187,12 +239,15 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
     }
     setTextIfChanged(preparationHeading, view.preparationHeading);
     preparationHint.textContent = view.preparationHint;
+    preparationEyebrow.hidden = view.compactReadyState;
+    preparationHint.hidden = view.compactReadyState;
     preparationAction.hidden = !view.showPreparationAction;
     preparationAction.disabled = !view.showPreparationAction;
     preparationAction.textContent = view.preparationActionLabel;
     preparationAbort.hidden = !view.showPreparationAbort;
     preparationAbort.textContent = view.preparationAbortLabel;
     preparationAbort.disabled = !view.showPreparationAbort;
+    preparationActions.hidden = view.compactReadyState;
 
     input.readOnly = !view.canEditInput;
     input.setAttribute('aria-busy', String(view.sessionBusy));
@@ -257,6 +312,7 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
 
   sourceLanguage.value = direction.sourceLanguage;
   targetLanguage.value = direction.targetLanguage;
+  runtimeBackend.value = requestedBackendPreference;
   input.lang = direction.sourceLanguage;
   session.subscribe(render);
   downloadUI.downloader.subscribe(render);
@@ -281,7 +337,15 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
     const target = targetLanguage.value as Language;
     changeDirection(changeTargetLanguage(direction, target));
   });
-  runtimeBackend.addEventListener('change', render);
+  runtimeBackend.addEventListener('change', () => {
+    const nextBackend = requestedBackend(runtimeBackend.value);
+    runtimeBackend.value = nextBackend;
+    if (nextBackend !== requestedBackendPreference) {
+      requestedBackendPreference = nextBackend;
+      savePreferences();
+    }
+    render();
+  });
   swap.addEventListener('click', () => changeDirection(swapDirection(direction)));
   insertExample.addEventListener('click', () => {
     if (input.value || !describeTranslation(session.getState(), input.value, direction, downloadUI.downloader.getState()).canEditInput) return;
@@ -325,6 +389,18 @@ export function mountTranslation(session: TranslationSession, downloadUI: ModelD
         ? modelDownload
         : element<HTMLSelectElement>('model-storage-mode'));
     }
+  });
+  savePreferencesToggle.addEventListener('change', () => {
+    persistenceEnabled = savePreferencesToggle.checked;
+    if (persistenceEnabled) {
+      savePreferences();
+      return;
+    }
+
+    const cleared = preferenceStore.disable();
+    setPreferencesNotice(cleared
+      ? ''
+      : 'このページでは保存しませんが、保存済みの設定を削除できなかった可能性があり、オフの設定も次回起動時に保持できない場合があります。');
   });
   preparationAbort.addEventListener('click', () => {
     const state = session.getState();
