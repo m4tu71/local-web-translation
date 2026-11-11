@@ -20,7 +20,7 @@
     <main class="page-shell">
       <p id="startup-error" class="error startup-error" role="alert" hidden></p>
 
-      <section class="preparation-banner" aria-labelledby="preparation-heading">
+      <section id="preparation-banner" class="preparation-banner" aria-labelledby="preparation-heading">
         <div class="preparation-message">
           <p class="eyebrow">翻訳の状態</p>
           <h2 id="preparation-heading">モデルと入力を確認しています</h2>
@@ -150,6 +150,7 @@
               オフライン利用の状態を確認しています。
             </p>
             <p id="offline-help" class="muted-copy"></p>
+            <p class="muted-copy">初回はこのアプリの保存データ（約 30 MB）を保存します。翻訳モデル（約 573 MB）は別の操作で取得します。</p>
             <div class="model-actions offline-actions">
               <button id="offline-prepare" class="button-primary" type="button" disabled>オフライン利用を準備</button>
               <button id="offline-retry" type="button" hidden>再試行</button>
@@ -176,12 +177,12 @@
           </section>
 
           <section class="settings-section danger-zone" aria-labelledby="offline-delete-heading">
-            <h2 id="offline-delete-heading">オフライン用アプリデータの削除</h2>
-            <p class="muted-copy">アプリ本体の保存データだけを削除します。OPFS に保存したモデルと設定は削除されません。次回オフラインで使うには再準備が必要です。</p>
+            <h2 id="offline-delete-heading">このアプリの保存データを削除</h2>
+            <p class="muted-copy">このアプリの保存データだけを削除します。ブラウザーに保存したモデルと設定は削除されません。次回オフラインで使うには再準備が必要です。</p>
             <button id="offline-clear" class="button-danger" type="button" aria-controls="offline-clear-confirmation" aria-expanded="false" disabled>アプリデータを削除</button>
             <p id="offline-clear-disabled-reason" class="muted-copy" hidden></p>
             <div id="offline-clear-confirmation" class="inline-confirmation" role="group" aria-labelledby="offline-clear-confirmation-text" hidden>
-              <p id="offline-clear-confirmation-text">このサイトのアプリ本体の保存データを削除します。保存モデル、翻訳方向、実行設定は残ります。</p>
+              <p id="offline-clear-confirmation-text">このアプリの保存データを削除します。保存モデル、翻訳方向、実行設定は残ります。</p>
               <div class="model-actions">
                 <button id="offline-clear-confirm" class="button-danger" type="button">削除を確定</button>
                 <button id="offline-clear-cancel" type="button">戻る</button>
