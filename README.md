@@ -31,11 +31,11 @@ PLaMo 3 Translate をブラウザ内で実行する静的翻訳アプリ（開�
 | PFML3・BOS・停止条件 | raw prompt と生成設定を実装。ロード時のトークン設定検査を追加。実モデルでの停止は未検証 |
 | モデル取得・キャッシュ | 固定版の取得・検証・進捗・中止、OPFS キャッシュ・保持期限・メモリ保存を実装。利用者が保存・復元・推論の動作を手動確認 |
 | 通常の翻訳画面 | 日本語 ↔ 英語、最大 10,000 UTF-16 コード単位の逐次・分割翻訳 UI を実装。新 UI の実ブラウザー・実モデル確認は未実施 |
-| 翻訳設定 | 翻訳方向と backend 要求値を localStorage に保存・復元。入力文と翻訳結果は保存しない |
+| 翻訳設定 | 既定オン。翻訳方向と backend 要求値を保存・復元でき、設定内のチェックでオフにできる。入力文と翻訳結果は保存しない |
 | アプリ全体のオフライン利用 | production build の Service Worker が現在のアプリ資産を CacheStorage に保存。準備には同 build の制御ページと期限内の検証済み OPFS モデルが必要。モデル取得・ロード、初回再読み込みと更新適用は明示操作 |
 | 実行環境の表示 | 要求設定と実環境を分けて表示。自動選択の実 backend は unknown、CPU 要求は WebGPU 初期化を無効にして CPU と表示。WebGPU API の有無は GPU 使用を意味しない |
 | OPFS キャッシュ・期限管理 | 実装済み。模擬 OPFS のテストと、実ブラウザーでの手動確認状況は[キャッシュ文書](docs/model-cache.md)を参照 |
-| 自動検証 | `npm test`: 175/175 pass（163 top-level）。`npm run build`（typecheck 含む）成功。`node scripts/verify-pages-build.mjs dist`: 9 files / 8 offline assets 検証成功 |
+| 自動検証 | `npm test`: 182/182 pass（170 top-level）。`npm run build`（typecheck 含む）成功。`node scripts/verify-pages-build.mjs dist`: 9 files / 8 offline assets 検証成功 |
 | GitHub Actions CI | PR / main 用 workflow を追加。2026-11-08、PR #2 の commit `897638a` で成功（[実行記録](https://github.com/m4tu71/local-web-translation/actions/runs/42414764912)）。この結果は当該 commit の検証で、後続 commit は各 workflow 実行で確認 |
 | GitHub Pages 公開 | [公開済み](https://m4tu71.github.io/local-web-translation/)。利用者がモデル取得、CPU / GPU のロード・翻訳・解除、ブラウザー再起動後のモデル保持を手動確認。エージェントは公開 URL の HTML HTTP 200 のみ確認 |
 

@@ -13,6 +13,7 @@
 - 翻訳ワークスペースと常時表示の翻訳状態を主役のまま保つ。既存のモデル設定とは sibling となる独立した `<details id="offline-settings">` を用意し、起動・翻訳のたびに全詳細を展開しない（Progressive Disclosure、H8）。
 - 翻訳画面の近くにはオフライン利用状態の短い要約だけを出す。詳細内ではアプリ本体の保存とモデルの保存を別々に示し、利用者がどちらのデータを操作しているか分かるようにする（H1、H6）。
 - 翻訳設定の説明と保存状態の通知は翻訳元・翻訳先の言語欄の近くに置く。backend の設定も同じ設定群として見つけられるようにし、言語選択と保存された設定の関係を近接させる。
+- 翻訳方向と実行設定を保存するかどうかは「モデルと保存設定」内のチェックボックスで変更できる。既定はオン。オフにすると保存済みの方向と backend を削除し、次回起動時に既定値へ戻す。
 - 「オフライン利用の準備」は明示的なボタンとし、オンラインで必要なアプリ資産を取得・検証して保存する。準備完了後もモデルは「モデルをロード」から明示してロードする。
 - 翻訳の状態領域にはオフライン可否の簡潔な要約と、翻訳できない理由および復旧操作への導線だけを出す。資産一覧やキャッシュの技術情報は詳細側に置く。
 - 操作ボタン、選択欄、開閉要素はタッチ時に最低44×44 pxの操作領域を確保する。ネイティブの `button`、`select`、`details/summary` を使い、キーボード focus を見失わせない。進捗値を細かくライブ通知せず、状態の段階変化だけを `role="status"` で伝える。
@@ -86,10 +87,10 @@ Hugging Face 上のモデル URL、モデル本体、部分ダウンロードは
 
 ## 翻訳設定の保存
 
-保存するのは翻訳元・翻訳先の言語方向と推論 backend の要求値だけ。初期値は既存 UI に合わせて日本語 → 英語、`auto`。backend は `auto` または `cpu`。設定値は再読み込み後の初期選択として使うもので、ロード済みモデルの実行状態を示すものではない。
+保存対象は翻訳設定の保存をオンにした場合の、翻訳元・翻訳先の言語方向と推論 backend の要求値だけ。チェックボックスは既定オン。初期値は既存 UI に合わせて日本語 → 英語、`auto`。backend は `auto` または `cpu`。設定値は再読み込み後の初期選択として使うもので、ロード済みモデルの実行状態を示すものではない。
 
-- `local-web-translation:translation-preferences:v1` という単一 `localStorage` 項目に `{ version: 1, sourceLanguage, targetLanguage, requestedBackend }` を保存する。方向は日本語 → 英語または英語 → 日本語の対向のみ有効。swap や両方の選択変更も対向状態を保つ。
-- 初期化時は JSON 形式、version、各列挙値、方向の組合せを検証する。不正・欠落・将来の未知版は安全な既定値に戻し、保存失敗もアプリ起動や翻訳を妨げない非ブロッキング警告にする。部分的に信用できる値を推測して採用しない。
+- `local-web-translation:translation-preferences:v1` という単一 `localStorage` 項目に version 2 の有効 record `{ version: 2, enabled: true, sourceLanguage, targetLanguage, requestedBackend }` または無効 record `{ version: 2, enabled: false }` を保存する。無効 record に翻訳設定は含めない。既存の version 1 は保存オンとして読み取る。方向は日本語 → 英語または英語 → 日本語の対向のみ有効。
+- 初期化時は JSON 形式、version、各列挙値、方向の組合せを検証する。不正・欠落・将来の未知版は安全な既定値に戻し、保存失敗もアプリ起動や翻訳を妨げない非ブロッキング警告にする。オフ切替に失敗した場合は、このページでは保存を止め、保存済み設定の削除やオフ設定の次回保持ができない可能性を知らせる。部分的に信用できる値を推測して採用しない。
 - `localStorage` の読み書き・JSON parse の例外を捕捉する。保存が利用できない場合は、このページ内で選んだ設定を利用できるが、再読み込み後には保持されないと知らせる。
 - この画面は `storage` イベントを購読しない。別タブから値が変わっても、開いているタブの選択・ロード済みモデル・進行中の操作は変えず、新しい設定は次回起動時に反映する。
 - 入力文、翻訳結果、undo 用の消去前入力、詳細ログ、ロード状態、model cache の内容はこの設定に含めない。翻訳のたびに「引き継いで再開」もしない。
@@ -111,7 +112,8 @@ Service Worker と CacheStorage は同一ビルドのアプリ資産だけを管
 | `tests/offline-build.test.mjs` / `tests/offline-worker.test.mjs` | manifest/build ID の生成と Service Worker の cache・protocol 状態を Node の mock 環境で確認 |
 | `tests/offline-client.test.mjs` | Service Worker の状態読取・request envelope・更新修復・client 間保護を mock 環境で確認 |
 | `tests/offline-ui.test.mjs` | オフライン準備条件、busy 状態の操作制限、確認後の再読み込み・削除を mock client で確認 |
-| `tests/translation-preferences.test.mjs` | 翻訳設定の保存・復元、不正 JSON・schema と localStorage 例外を確認 |
+| `tests/ui-document.test.mjs` | UI が参照する ID と HTML の ARIA 参照が実文書に存在し、一意であることを確認 |
+| `tests/translation-preferences.test.mjs` | 翻訳設定の有効化・無効化、旧版読取、不正 JSON・schema と localStorage 例外を確認 |
 
 ## 確認項目と未確認範囲
 
