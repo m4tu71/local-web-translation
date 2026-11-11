@@ -65,6 +65,8 @@
               </select>
             </div>
             <p id="language-help" class="language-help">日本語と英語の間で翻訳します。方向を変えても入力文は残ります。</p>
+            <p id="preferences-status" class="preferences-status" role="status" aria-live="polite" aria-atomic="true"></p>
+            <p class="language-help preferences-note">翻訳方向と実行設定のみ次回も利用します。入力文と翻訳結果は保存しません。</p>
           </div>
 
           <div class="translation-grid">
@@ -129,6 +131,65 @@
           </div>
         </form>
       </section>
+
+      <p id="offline-summary" class="offline-summary" role="status" aria-live="polite" aria-atomic="true">
+        オフライン利用の状態を確認しています。
+      </p>
+
+      <details id="offline-settings" class="settings-panel offline-settings">
+        <summary>オフライン利用と設定</summary>
+        <div class="settings-content offline-content">
+          <section class="settings-section" aria-labelledby="offline-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">接続がないときも翻訳</p>
+                <h2 id="offline-heading">オフライン利用</h2>
+              </div>
+            </div>
+            <p id="offline-status" class="offline-status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
+              オフライン利用の状態を確認しています。
+            </p>
+            <p id="offline-help" class="muted-copy"></p>
+            <div class="model-actions offline-actions">
+              <button id="offline-prepare" class="button-primary" type="button" disabled>オフライン利用を準備</button>
+              <button id="offline-retry" type="button" hidden>再試行</button>
+              <button id="offline-open-model" type="button" aria-controls="model-settings">モデルの保存を確認</button>
+            </div>
+            <p id="offline-disabled-reason" class="muted-copy" hidden></p>
+            <p id="offline-error" class="error" role="alert" tabindex="-1" hidden></p>
+            <div id="offline-reload-confirmation" class="inline-confirmation" role="group" aria-labelledby="offline-reload-confirmation-text" hidden>
+              <p id="offline-reload-confirmation-text">再読み込みすると、入力文・翻訳結果・途中までの翻訳が消えます。必要な内容を控えてから続けてください。</p>
+              <div class="model-actions">
+                <button id="offline-reload-confirm" class="button-primary" type="button">再読み込みして準備を完了</button>
+                <button id="offline-reload-cancel" type="button">戻る</button>
+              </div>
+            </div>
+            <button id="offline-update" class="button-primary" type="button" aria-controls="offline-update-confirmation" aria-expanded="false" hidden>更新して再読み込み</button>
+            <p id="offline-update-disabled-reason" class="muted-copy" hidden></p>
+            <div id="offline-update-confirmation" class="inline-confirmation" role="group" aria-labelledby="offline-update-confirmation-text" hidden>
+              <p id="offline-update-confirmation-text">再読み込みすると、入力文・翻訳結果・途中までの翻訳が消えます。必要な内容を控えてから更新してください。</p>
+              <div class="model-actions">
+                <button id="offline-update-confirm" class="button-primary" type="button">更新を適用して再読み込み</button>
+                <button id="offline-update-cancel" type="button">戻る</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section danger-zone" aria-labelledby="offline-delete-heading">
+            <h2 id="offline-delete-heading">オフライン用アプリデータの削除</h2>
+            <p class="muted-copy">アプリ本体の保存データだけを削除します。OPFS に保存したモデルと設定は削除されません。次回オフラインで使うには再準備が必要です。</p>
+            <button id="offline-clear" class="button-danger" type="button" aria-controls="offline-clear-confirmation" aria-expanded="false" disabled>アプリデータを削除</button>
+            <p id="offline-clear-disabled-reason" class="muted-copy" hidden></p>
+            <div id="offline-clear-confirmation" class="inline-confirmation" role="group" aria-labelledby="offline-clear-confirmation-text" hidden>
+              <p id="offline-clear-confirmation-text">このサイトのアプリ本体の保存データを削除します。保存モデル、翻訳方向、実行設定は残ります。</p>
+              <div class="model-actions">
+                <button id="offline-clear-confirm" class="button-danger" type="button">削除を確定</button>
+                <button id="offline-clear-cancel" type="button">戻る</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </details>
 
       <details id="model-settings" class="settings-panel">
         <summary>モデルと保存設定</summary>
